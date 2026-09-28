@@ -1,0 +1,4 @@
+*.o
+scale_bench
+results/*.csv
+results/scale_N*
