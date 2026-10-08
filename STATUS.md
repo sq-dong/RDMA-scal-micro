@@ -1,73 +1,55 @@
 # RDMA / Cluster Status
 
-Generated: 2026-09-28（复检 server03 恢复后；MS 已对齐到 `192.168.101.0/24`）
+Generated: 2026-10-03（对齐绑核后 `scale_{server03,thoth,both}.csv` 与现行脚本）
+
+结果解读：[`docs/RDMA_SCAL_RESULTS_AND_CACHE.md`](../docs/RDMA_SCAL_RESULTS_AND_CACHE.md)  
+流程与 RNIC 参数：[`docs/RDMA_SCAL_RNIC_AND_FLOW.md`](../docs/RDMA_SCAL_RNIC_AND_FLOW.md)
 
 ## Connectivity checklist
 
 | Check | Status | Detail |
 |-------|--------|--------|
-| server03 CX-5 链路 | **OK** | `mlx5_3` / `enp24s0f0np0` Up，100 Gb/s，Link detected |
-| MS ↔ server03 ping | **OK** | `192.168.101.20` ↔ `192.168.101.11` |
-| 同一 RoCE 子网 | **OK** | `192.168.101.0/24`（已不再使用旧文档的 `10.0.0.21`） |
-| IB active_mtu | **OK** | 两端均为 **4096**；eth MTU **9000** |
-| RoCEv2 GID | **OK** | MS index **6**；server03 index **3** |
-| thoth 入网 | **未就绪** | `ens7f1np1` Up 100G，但 IP=`192.168.105.3`，与 MS 不通 |
-| 旧 `10.0.0.0/24` 文档配置 | 过时 | MS 仍保留 `10.0.0.20` 别名；client 已不在该网段 |
+| MS ↔ server03 | `10.0.0.20` ↔ `10.0.0.21` | eth MTU **9000** / IB **4096**（曾掉 1500/1024，需防 thrash） |
+| MS ↔ thoth | `10.0.0.20` ↔ `10.0.0.22` | 同上 |
+| RoCEv2 GID | MS **4**；server03 **3**；thoth **3** | `show_gids \| grep 10.0.0` |
+| 链路 | 100 Gb/s CX-5 | FW MS/server03 `16.35.4506`；thoth `16.35.8002` |
 
-## Machine layout（当前可用）
+## Machine layout
 
-| Role | Host | Device | Netdev | IPv4 | RoCEv2 GID |
-|------|------|--------|--------|------|------------|
-| MS | smartx-server02 | `mlx5_0` | `enp59s0f0np0` | **192.168.101.20**（兼有 10.0.0.20） | **6** |
-| Client1 | smartx-server03 | `mlx5_3` | `enp24s0f0np0` | **192.168.101.11** | **3** |
-| Client2 | thoth | `mlx5_1` | `ens7f1np1` | 192.168.105.3（孤立） | 3（本机） |
+| Role | Host | Device | IPv4 | RoCEv2 GID | CPU（绑核） |
+|------|------|--------|------|------------|-------------|
+| MS | smartx-server02 | `mlx5_0` | **10.0.0.20** | **4** | 5218；`local_cpulist` 偶核 0,2,…,62 |
+| Client1 | smartx-server03 | `mlx5_3` | **10.0.0.21** | **3** | 5218；同上 |
+| Client2 | thoth | `mlx5_1` | **10.0.0.22** | **3** | 6780E；`local_cpulist`（常 0–143） |
 
-管理网（SSH）：`192.168.100.12` / `.13` / `.68`，三机互通。
+管理网（SSH）：`192.168.100.12` / `.13` / `.68`。
 
-## RNIC 参数摘要
-
-| 参数 | server02 (MS) | server03 | thoth |
-|------|---------------|----------|-------|
-| HCA | ConnectX-5 (4119) | ConnectX-5 (4119) | ConnectX-5 (4119) |
-| FW | 16.35.4506 | 16.35.4506 | 16.35.8002 |
-| Link | 100 Gb/s Up | 100 Gb/s Up | 100 Gb/s Up（异网段） |
-| Device Memory | 128 KB | 128 KB | 128 KB |
-| max_inline RC/UC | **828 B** | （同系 CX-5） | 828 B |
-| max_inline UD | **956 B** | | 956 B |
-| On-chip QP/ICM cache | **不可直接读** | 同左 | 同左 |
-| PCIe (MS) | Gen3 x16 | — | — |
-| PIO / BlueFlame | 典型 256 B record（无 sysfs 直接暴露） | 同左 | 同左 |
-
-说明：`ibv_devinfo` 的 *maximum available device memory* 是 MEMIC，**不是** HERD 讨论的 QP 上下文 cache；后者靠本仓库的 N 扫描反推拐点。
-
-## 网络变更记录（本机）
-
-为与 server03 的 `192.168.101.11` 互通，在 server02 上：
-
-1. 给 `enp59s0f0np0` 增加 `192.168.101.20/24`，MTU 9000（写入 `01-roce.yaml`）。
-2. 从 `enp94s0f1` 去掉冲突的 `192.168.101.12`（该口不是 RoCE 网卡，会抢走路由）。
-
-若重启后 ping 失败，先确认：
+## 采集入口
 
 ```bash
-ping -c2 -I enp59s0f0np0 192.168.101.11
-show_gids | grep 192.168.101
+cd ~/rdma_scal && make -j
+source ./scripts/setup_machine.sh
+
+./scripts/collect_scale.sh              # → results/scale_server03.csv + scale_fig_*_server03.*
+CLT_SET=thoth ./scripts/collect_scale.sh
+./scripts/collect_scale.sh both         # N 到 40 → scale_both.csv
+
+PIN=0 ./scripts/collect_scale.sh        # 关绑核
 ```
 
-## thoth 接入（可选）
+| 项 | 现行默认 |
+|----|----------|
+| `CLT_SET` | `server03` \| `thoth` \| `both` |
+| `PIN` | `1`（一进程一核，仅 NIC NUMA） |
+| `NQPS` | 单机到 32；both 到 **40** |
+| 输出 | `results/scale_<tag>.csv` + `scale_fig_{A,B,C,all}_<tag>.*` |
 
-在 thoth 上将 RoCE 口改到同一子网，例如：
+## 绑核后 WRITE 峰值摘要（2026-09-30 CSV）
 
-```bash
-# 需 sudo；示例
-sudo ip addr add 192.168.101.22/24 dev ens7f1np1
-sudo ip link set ens7f1np1 mtu 9000
-# 然后更新 setup_machine.sh: CLT_HOST2=thoth CLT_IP2=192.168.101.22 CLT_GID2=<show_gids>
-```
+| | Out-WRITE 峰 | Out 悬崖 | In-WRITE |
+|--|--------------|----------|----------|
+| server03 | **~65 @ N=12** | **~33 @ N=16** | 平台 **~40.5**（N=8–16） |
+| thoth | **~65 @ N=12** | **~33 @ N=16** | 升到 **~82.5 @ N=24** |
+| both | **~65 @ N=12** | 同左 | 升到 **~118 @ N=40** |
 
-## 复检命令
-
-```bash
-source ~/rdma_scal/scripts/setup_machine.sh
-./scripts/probe_status.sh ~/rdma_scal/STATUS.md
-```
+Out-\* 几乎不随 client 变；In-\* 受 client TX / 分摊影响。片上 QP cache 代理见 `cache_probe/`。

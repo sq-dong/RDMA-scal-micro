@@ -1,12 +1,12 @@
 /*
- * scale_bench.c — RDMA scalability microbenchmark (HERD Sec.3 / Fig.6 style).
+ * scale_bench.c - RDMA scalability microbenchmark.
  *
- * Two machines, N processes per side (all-to-all for connected QPs):
- *   out-write / in-write / out-read : each proc has N QPs → N² active QPs
- *   out-send-ud : 1 MS UD QP + N AHs; N client UD QPs (recv)
- *   in-send-ud  : N client UD QPs send → 1 MS UD QP (recv)
+ * Two machines, N processes per side:
+ *   out-write / in-write / out-read : N QPs per process (N*N active QPs)
+ *   out-send-ud : N server procs x N client procs; each server has 1 UD QP + N AHs
+ *   in-send-ud  : N client UD QPs send to 1 server UD QP (recv)
  *
- * Bootstrap: TCP exchange of QP endpoints (same pattern as rdma_verb_test).
+ * Bootstrap: TCP exchange of QP endpoints.
  */
 
 #include "common.h"
@@ -40,16 +40,18 @@ struct cfg {
   int use_inline;
   int use_uc; /* ignored for READ / UD */
   enum scale_mode mode;
+  int pin_cpu; /* >=0: sched_setaffinity to this CPU; -1: no pin */
 };
 
 static void usage(const char *a) {
   fprintf(stderr,
           "Usage: %s -s|-c -d DEV -a IP -I ID -q N [-p PORT] [-x GID]\n"
           "  -M out-write|in-write|out-read|out-send-ud|in-send-ud\n"
-          "  [-t POSTLIST] [-l SIZE] [-Q UNSIG] [-D SEC]\n"
+          "  [-t POSTLIST] [-l SIZE] [-Q UNSIG] [-D SEC] [-C CPU]\n"
           "  [--no-inline] [--rc|--uc]\n"
           "  -q N : procs per side (connected ⇒ N² QPs)\n"
           "  -I   : process id in 0..N-1\n"
+          "  -C   : pin this process to logical CPU (NIC NUMA-local preferred)\n"
           "  -a   : MS RDMA IPv4 (TCP bind/connect target)\n",
           a);
   exit(1);
@@ -115,12 +117,13 @@ static void parse(int argc, char **argv, struct cfg *c) {
   c->use_uc = 1;
   c->is_server = -1;
   c->mode = MODE_OUT_WRITE;
+  c->pin_cpu = -1;
   static struct option longopts[] = {{"no-inline", no_argument, 0, 1001},
                                      {"rc", no_argument, 0, 1002},
                                      {"uc", no_argument, 0, 1003},
                                      {0, 0, 0, 0}};
   int opt;
-  while ((opt = getopt_long(argc, argv, "scd:a:p:x:l:q:I:t:Q:D:M:h", longopts,
+  while ((opt = getopt_long(argc, argv, "scd:a:p:x:l:q:I:t:Q:D:M:C:h", longopts,
                             NULL)) != -1) {
     switch (opt) {
     case 's':
@@ -162,6 +165,9 @@ static void parse(int argc, char **argv, struct cfg *c) {
     case 'M':
       c->mode = parse_mode(optarg);
       break;
+    case 'C':
+      c->pin_cpu = atoi(optarg);
+      break;
     case 1001:
       c->use_inline = 0;
       break;
@@ -187,9 +193,9 @@ static void parse(int argc, char **argv, struct cfg *c) {
   }
   if (c->mode == MODE_OUT_READ)
     c->use_uc = 0; /* READ requires RC */
-  if ((c->mode == MODE_OUT_SEND_UD || c->mode == MODE_IN_SEND_UD) &&
-      c->is_server && c->proc_id != 0) {
-    fprintf(stderr, "UD MS side: only -I 0 participates as the single QP\n");
+  /* in-send-ud: single MS receiver QP (-I 0 only). out-send-ud: all N MS procs. */
+  if (c->mode == MODE_IN_SEND_UD && c->is_server && c->proc_id != 0) {
+    fprintf(stderr, "In-SEND-UD MS side: only -I 0 participates as the single QP\n");
     exit(1);
   }
   if (c->unsig < 1)
@@ -353,6 +359,8 @@ int main(int argc, char **argv) {
   struct cfg c;
   parse(argc, argv, &c);
   setvbuf(stdout, NULL, _IONBF, 0);
+  if (c.pin_cpu >= 0)
+    vt_pin_cpu(c.pin_cpu);
 
   const int is_ud = is_ud_mode(c.mode);
   const int sender = i_am_sender(&c);
@@ -414,8 +422,8 @@ int main(int argc, char **argv) {
 
   if (c.is_server) {
     mesh_listen_exchange(&c, locals, remotes, n_peer, n_local);
-  } else if (is_ud) {
-    /* Clients connect only to MS process 0. */
+  } else if (c.mode == MODE_IN_SEND_UD) {
+    /* In-SEND: every client connects only to MS process 0. */
     int fd = -1;
     for (int try = 0; try < 600; try++) {
       fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -437,6 +445,7 @@ int main(int argc, char **argv) {
     vt_tcp_exchange(fd, &locals[0], &remotes[0]);
     close(fd);
   } else {
+    /* Connected WRITE/READ, and Out-SEND-UD: full N×N TCP mesh. */
     mesh_connect_exchange(&c, locals, remotes, n_peer, n_local);
   }
 
@@ -444,13 +453,11 @@ int main(int argc, char **argv) {
     vt_qp_to_rtr(&v, qps[0], &remotes[0], qpt);
     vt_qp_to_rts(qps[0], psns[0]);
     if (c.mode == MODE_OUT_SEND_UD && sender) {
+      /* One AH per client peer; this server proc can SEND to every client. */
       for (int i = 0; i < n_peer; i++)
         ahs[i] = make_ah(&v, &remotes[i]);
     } else if (c.mode == MODE_IN_SEND_UD && sender) {
-      /* client sender: one AH to MS */
       ahs[0] = make_ah(&v, &remotes[0]);
-    } else if (c.mode == MODE_IN_SEND_UD && !sender && c.is_server) {
-      /* MS receiver for in-send-ud: no AH needed */
     }
   } else {
     for (int i = 0; i < n_local; i++) {
@@ -594,7 +601,11 @@ int main(int argc, char **argv) {
   if (sec < 1e-6)
     sec = 1e-6;
   double mops = ops / sec / 1e6;
-  int q_report = is_ud ? (c.mode == MODE_OUT_SEND_UD ? n_peer : 1) : (N * N);
+  /* Out-SEND-UD: N senders × N destinations (AH paths). In-SEND: 1 recv QP. */
+  int q_report =
+      (c.mode == MODE_OUT_SEND_UD) ? (N * N)
+      : (c.mode == MODE_IN_SEND_UD)  ? 1
+                                     : (N * N);
   printf("scale %s: %.2f Mops  N=%d id=%d Q=%d size=%d postlist=%d\n", tag,
          mops, N, c.proc_id, q_report, c.size, pl);
   fflush(stdout);

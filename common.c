@@ -1,5 +1,5 @@
 /*
- * common.c — device open, QP state machine, TCP endpoint exchange, CQ poll.
+ * common.c - device open, QP state machine, TCP endpoint exchange, CQ poll.
  *
  * Pattern reference: rdma_bench/libhrd/hrd_conn.c
  *   - hrd_ctrl_blk_init / create RC|UC|UD QPs
@@ -12,7 +12,7 @@
 #include <netdb.h>
 
 /*
- * Original helper (unused — logic inlined in vt_open_device). Kept fully commented:
+ * Original helper (unused; logic inlined in vt_open_device). Kept fully commented:
  *
  * static struct ibv_device *find_dev(const char *name) {
  *   int n = 0;
@@ -179,7 +179,7 @@ void vt_qp_to_rtr(struct vt_ctx *v, struct ibv_qp *qp,
   struct ibv_qp_attr attr;
   memset(&attr, 0, sizeof(attr));
   attr.qp_state = IBV_QPS_RTR;
-  /* Match libhrd (IBV_MTU_4096) / port active MTU — never hardcode 1024. */
+  /* Match port active MTU (prefer IBV_MTU_4096); never hardcode 1024. */
   attr.path_mtu = v->active_mtu ? v->active_mtu : IBV_MTU_4096;
   attr.dest_qp_num = remote->qpn;
   attr.rq_psn = remote->psn;
@@ -332,4 +332,32 @@ int vt_poll_cq_one(struct ibv_cq *cq, struct ibv_wc *wc, int timeout_ms) {
     if ((vt_ns() - t0) / 1000000ull > (uint64_t)timeout_ms)
       return -1;
   }
+}
+
+#include <sched.h>
+#include <sys/syscall.h>
+
+int vt_pin_cpu(int cpu) {
+  cpu_set_t mask;
+  unsigned int got = 0, numa = 0;
+
+  if (cpu < 0)
+    return 0;
+
+  CPU_ZERO(&mask);
+  CPU_SET((unsigned)cpu, &mask);
+  if (sched_setaffinity(0, sizeof(mask), &mask) != 0) {
+    fprintf(stderr, "vt_pin_cpu(%d): sched_setaffinity: %s\n", cpu,
+            strerror(errno));
+    return -1;
+  }
+  /* Verify the thread migrated to the requested CPU. */
+  if (syscall(SYS_getcpu, &got, &numa, NULL) == 0) {
+    if ((int)got != cpu)
+      fprintf(stderr, "vt_pin_cpu: wanted cpu %d, running on %u\n", cpu, got);
+    fprintf(stderr, "vt: pinned cpu=%d numa=%u\n", cpu, numa);
+  } else {
+    fprintf(stderr, "vt: pinned cpu=%d\n", cpu);
+  }
+  return 0;
 }

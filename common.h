@@ -1,12 +1,15 @@
 /*
- * common.h — shared helpers for HERD Sec.3 (Fig.2–6) microbenchmarks.
+ * common.h - shared helpers for rdma_scal microbenchmarks.
  *
- * Inspired by rdma_bench/libhrd (hrd_conn.c, hrd.h) but without memcached:
- * we exchange QP metadata over a plain TCP socket instead of hrd_publish_*.
+ * Device/QP setup and TCP exchange of QP metadata (no memcached registry).
  */
 
 #ifndef RDMA_SCAL_COMMON_H
 #define RDMA_SCAL_COMMON_H
+
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 
 #include <arpa/inet.h>
 #include <assert.h>
@@ -36,24 +39,19 @@
   } while (0)
 
 /*
- * Inline / WQE sizing — CRITICAL for message rate.
+ * Inline / WQE sizing (critical for message rate).
  *
- * rdma_bench/libhrd/hrd.h:
- *   "Small max_inline_data reduces the QP's max WQE size, which reduces the
- *    DMA size in doorbell method of WQE fetch."
- *   #define HRD_MAX_INLINE 60
- *
- * Creating every QP with the NIC's absolute max (~828B on CX-5) makes WQEs
- * enormous, shrinks effective SQ depth, and tanks outbound/ECHO Mops.
+ * Creating every QP with the NIC absolute max inline (~828B RC/UC) makes WQEs
+ * large, shrinks effective SQ depth, and hurts small-message throughput.
  *
  * Policy:
- *   VT_INLINE_WQE   — default create-time grant (libhrd-style), keep WQEs small
- *   VT_MAX_INLINE   — RC/UC hardware ceiling (for Fig.2 size sweeps only)
- *   VT_MAX_INLINE_UD — UD hardware ceiling
+ *   VT_INLINE_WQE    - default create-time grant; keep WQEs small
+ *   VT_MAX_INLINE    - RC/UC hardware ceiling
+ *   VT_MAX_INLINE_UD - UD hardware ceiling
  *
- * Throughput binaries (fig3–6) create with vt_inline_grant(size, ud):
- *   no-inline runs → VT_INLINE_WQE
- *   inline runs    → clamp(size, VT_INLINE_WQE .. HW max)
+ * Use vt_inline_grant(size, ud):
+ *   no-inline runs: VT_INLINE_WQE
+ *   inline runs:    clamp(size, VT_INLINE_WQE .. HW max)
  */
 #define VT_INLINE_WQE 60
 #define VT_MAX_INLINE 828
@@ -152,6 +150,12 @@ static inline uint64_t vt_ns(void) {
 
 void vt_poll_cq(struct ibv_cq *cq, int n);
 int vt_poll_cq_one(struct ibv_cq *cq, struct ibv_wc *wc, int timeout_ms);
+
+/*
+ * Pin calling thread to one logical CPU via sched_setaffinity.
+ * cpu < 0: no-op. Returns 0 on success, -1 on failure (non-fatal for caller).
+ */
+int vt_pin_cpu(int cpu);
 
 /* Selective signaling helpers (same constraints as rdma_bench README). */
 static inline int vt_should_signal(uint64_t nb_tx, int unsig_batch) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Probe RNIC / link / GID state on MS + clients → STATUS snapshot.
+# Probe RNIC / link / GID state on MS + clients; write STATUS snapshot.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=setup_machine.sh
@@ -54,7 +54,7 @@ probe_host() {
   if [[ -n "${CLT_HOST2:-}" ]]; then
     echo "| Client2 | \`$CLT_HOST2\` | \`$CLT_DEV2\` | \`$CLT_IP2\` | \`$CLT_GID2\` |"
   else
-    echo "| Client2 | thoth | — | **not peered** | disable |"
+    echo "| Client2 | thoth | - | **not peered** | disable |"
   fi
   echo
   echo "## Live probe"
@@ -64,7 +64,7 @@ probe_host() {
     probe_host "Client2" "$CLT_HOST2"
   else
     echo
-    echo "### Client2 (thoth) — skipped (CLT_HOST2 empty)"
+    echo "### Client2 (thoth) - skipped (CLT_HOST2 empty)"
   fi
   echo
   echo "## Ping"

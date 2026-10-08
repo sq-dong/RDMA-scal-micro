@@ -2,3 +2,5 @@
 scale_bench
 results/*.csv
 results/scale_N*
+STATUS.md
+cache_probe/
