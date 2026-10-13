@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 """
-Plot rdma_scal scalability curves from results/scale.csv.
+Plot rdma_scal CSV into three figure sets:
+  all      - every curve in the CSV
+  starred  - focused verb subset
+  A        - Out-WRITE-UC-inl, In-WRITE-UC-inl, Out-SEND-UD-inl
 
-Figures:
-  A   - Out-WRITE / In-WRITE / Out-SEND-UD
-  B   - Out-WRITE vs Out-READ
-  C   - Out-WRITE inline vs DMA
-  all - plotted curves on one canvas (In-SEND omitted)
-
-Usage:
-  python3 scripts/plot_scale.py
-  python3 scripts/plot_scale.py --csv results/scale.csv --out-dir results --x n
-  python3 scripts/plot_scale.py --fig A B all --x q
+Line color / marker / linestyle follow the historical scale_fig_all_both.pdf
+style for overlapping verbs, extended consistently to the full matrix.
 """
 
 from __future__ import annotations
@@ -30,7 +25,7 @@ STYLE = {
     "font.size": 12,
     "axes.labelsize": 13,
     "axes.titlesize": 14,
-    "legend.fontsize": 10,
+    "legend.fontsize": 9,
     "xtick.labelsize": 11,
     "ytick.labelsize": 11,
     "axes.grid": True,
@@ -41,51 +36,92 @@ STYLE = {
     "savefig.bbox": "tight",
 }
 
-# Display order + style for known curves
-CURVE_STYLE = {
+# Starred verbs from the experiment plan.
+STARRED = [
+    "In-READ-RC-dma",
+    "Out-READ-RC-dma",
+    "In-WRITE-RC-inl",
+    "Out-WRITE-RC-inl",
+    "In-WRITE-UC-inl",
+    "Out-WRITE-UC-inl",
+    "In-SEND-UD-dma",
+    "Out-SEND-UD-inl",
+]
+
+FIG_A = [
+    "Out-WRITE-UC-inl",
+    "In-WRITE-UC-inl",
+    "Out-SEND-UD-inl",
+]
+
+# Color / marker / linestyle aligned with results/scale_fig_all_both.pdf
+# (git HEAD). First five entries match that figure exactly.
+# Convention for extensions: inl=solid, dma=dashed; In uses square/diamond,
+# Out uses circle/triangle; same verb family shares a hue.
+CURVE_STYLE: dict[str, dict[str, str]] = {
+    # --- exact match to scale_fig_all_both.pdf ---
     "Out-WRITE-UC-inl": {"color": "#d62728", "marker": "o", "ls": "-"},
     "In-WRITE-UC-inl": {"color": "#1f77b4", "marker": "s", "ls": "-"},
     "Out-SEND-UD-inl": {"color": "#2ca02c", "marker": "^", "ls": "-"},
     "Out-READ-RC-dma": {"color": "#9467bd", "marker": "D", "ls": "--"},
     "Out-WRITE-UC-dma": {"color": "#ff7f0e", "marker": "v", "ls": "--"},
-    # "In-SEND-UD-inl": {"color": "#17becf", "marker": "P", "ls": "-."},
+    # --- READ ---
+    "In-READ-RC-dma": {"color": "#c5b0d5", "marker": "s", "ls": "--"},
+    # --- WRITE-UC ---
+    "In-WRITE-UC-dma": {"color": "#aec7e8", "marker": "D", "ls": "--"},
+    # --- WRITE-RC ---
+    "Out-WRITE-RC-inl": {"color": "#8c564b", "marker": "o", "ls": "-"},
+    "In-WRITE-RC-inl": {"color": "#c49c94", "marker": "s", "ls": "-"},
+    "Out-WRITE-RC-dma": {"color": "#8c564b", "marker": "v", "ls": "--"},
+    "In-WRITE-RC-dma": {"color": "#c49c94", "marker": "D", "ls": "--"},
+    # --- SEND-UD ---
+    "Out-SEND-UD-dma": {"color": "#98df8a", "marker": "v", "ls": "--"},
+    "In-SEND-UD-inl": {"color": "#17becf", "marker": "s", "ls": "-"},
+    "In-SEND-UD-dma": {"color": "#9edae5", "marker": "D", "ls": "--"},
+    # --- SEND-UC ---
+    "Out-SEND-UC-inl": {"color": "#e377c2", "marker": "^", "ls": "-"},
+    "Out-SEND-UC-dma": {"color": "#f7b6d2", "marker": "v", "ls": "--"},
+    "In-SEND-UC-inl": {"color": "#bcbd22", "marker": "s", "ls": "-"},
+    "In-SEND-UC-dma": {"color": "#dbdb8d", "marker": "D", "ls": "--"},
+    # --- SEND-RC ---
+    "Out-SEND-RC-inl": {"color": "#7f7f7f", "marker": "^", "ls": "-"},
+    "Out-SEND-RC-dma": {"color": "#c7c7c7", "marker": "v", "ls": "--"},
+    "In-SEND-RC-inl": {"color": "#393b79", "marker": "s", "ls": "-"},
+    "In-SEND-RC-dma": {"color": "#9c9ede", "marker": "D", "ls": "--"},
 }
 
-# Commented out of default figures; uncomment style above + entries below to restore.
-SKIP_CURVES = {
-    "In-SEND-UD-inl",
-    "In-SEND-UD-dma",
-}
+_FALLBACK_MARKERS = ["o", "s", "^", "v", "D", "P", "X", "*"]
+_FALLBACK_COLORS = [
+    "#d62728",
+    "#1f77b4",
+    "#2ca02c",
+    "#9467bd",
+    "#ff7f0e",
+    "#17becf",
+    "#8c564b",
+    "#e377c2",
+    "#7f7f7f",
+    "#bcbd22",
+]
 
-FIG_CURVES = {
-    "A": [
-        "Out-WRITE-UC-inl",
-        "In-WRITE-UC-inl",
-        "Out-SEND-UD-inl",
-    ],
-    "B": [
-        "Out-WRITE-UC-inl",
-        "Out-READ-RC-dma",
-    ],
-    "C": [
-        "Out-WRITE-UC-inl",
-        "Out-WRITE-UC-dma",
-        # "In-SEND-UD-inl",
-    ],
-    "all": None,  # filled at runtime from CSV
-}
 
-TITLES = {
-    "A": "Fig.A - WRITE and SEND-UD scalability",
-    "B": "Fig.B - Outbound WRITE vs READ",
-    # "C": "Fig.C - Out-WRITE inline vs DMA (+ In-SEND-UD)",
-    "C": "Fig.C - Out-WRITE inline vs DMA",
-    "all": "All scalability curves",
-}
+def style_for(curve: str) -> dict[str, str]:
+    if curve in CURVE_STYLE:
+        return CURVE_STYLE[curve]
+    # Stable fallback for any unexpected name.
+    h = 0
+    for ch in curve:
+        h = (h * 131 + ord(ch)) & 0xFFFFFFFF
+    ls = "--" if curve.endswith("-dma") else "-"
+    return {
+        "color": _FALLBACK_COLORS[h % len(_FALLBACK_COLORS)],
+        "marker": _FALLBACK_MARKERS[h % len(_FALLBACK_MARKERS)],
+        "ls": ls,
+    }
 
 
 def load_csv(path: Path) -> dict[str, list[tuple[int, int, float]]]:
-    """curve -> list of (n, active_q_or_dest, mops), sorted by n."""
+    """curve -> list of (n_srv, active_q, mops), sorted by n_srv."""
     data: dict[str, list[tuple[int, int, float]]] = defaultdict(list)
     with path.open(newline="") as f:
         reader = csv.DictReader(f)
@@ -93,7 +129,8 @@ def load_csv(path: Path) -> dict[str, list[tuple[int, int, float]]]:
             if not row.get("curve"):
                 continue
             try:
-                n = int(row["n"])
+                # New schema: n_srv; legacy: n
+                n = int(row["n_srv"] if "n_srv" in row and row["n_srv"] else row["n"])
                 q = int(float(row["active_q_or_dest"]))
                 mops = float(row["mops"])
             except (KeyError, ValueError):
@@ -111,69 +148,65 @@ def x_of(row: tuple[int, int, float], which: str) -> int:
 
 def xlabel_for(which: str) -> str:
     if which == "n":
-        return "N (#procs per side)"
+        return "N (processes per side; clients = N)"
     return "Active QPs or destinations (Q)"
 
 
-def _plot_one(
+def ordered_curves(data: dict[str, list[tuple[int, int, float]]]) -> list[str]:
+    """Prefer CURVE_STYLE order (same as historical both figure), then extras."""
+    ordered = [c for c in CURVE_STYLE if c in data]
+    for c in sorted(data):
+        if c not in ordered:
+            ordered.append(c)
+    return ordered
+
+
+def plot_one(
     data: dict[str, list[tuple[int, int, float]]],
     curves: list[str],
     out_path: Path,
     title: str,
     x_which: str,
-    figsize: tuple[float, float],
-    legend_outside: bool = False,
+    figsize: tuple[float, float] = (10.0, 6.5),
+    legend_outside: bool = True,
 ) -> None:
     plt.rcParams.update(STYLE)
     fig, ax = plt.subplots(figsize=figsize)
-
-    plotted = 0
-    for name in curves:
-        series = data.get(name)
-        if not series:
-            print(f"  warn: missing curve {name}")
+    drawn = 0
+    for curve in curves:
+        rows = data.get(curve)
+        if not rows:
             continue
-        xs = [x_of(r, x_which) for r in series]
-        ys = [r[2] for r in series]
-        st = CURVE_STYLE.get(
-            name, {"color": None, "marker": "o", "ls": "-"}
-        )
+        xs = [x_of(r, x_which) for r in rows]
+        ys = [r[2] for r in rows]
+        st = style_for(curve)
         ax.plot(
             xs,
             ys,
-            label=name,
+            label=curve,
             color=st["color"],
             marker=st["marker"],
             linestyle=st["ls"],
             linewidth=2.0,
             markersize=7,
         )
-        plotted += 1
-
-    if plotted == 0:
+        drawn += 1
+    if drawn == 0:
         plt.close(fig)
-        print(f"  skip {out_path.name}: no data")
+        print(f"  skip {out_path.name}: no matching curves")
         return
 
     ax.set_xlabel(xlabel_for(x_which))
     ax.set_ylabel("Throughput (Mops)")
     ax.set_title(title)
     ax.set_ylim(bottom=0)
-
-    # X ticks: for N-axis use 4,8,12,16,... (keep curve points at 1,2 if present)
-    if plotted and x_which == "n":
-        all_xs: list[int] = []
-        for name in curves:
-            series = data.get(name)
-            if series:
-                all_xs.extend(x_of(r, x_which) for r in series)
-        if all_xs:
-            xmax = max(all_xs)
-            ticks = list(range(4, xmax + 1, 4))
-            if ticks:
-                ax.set_xticks(ticks)
-                ax.set_xlim(left=0, right=max(xmax, ticks[-1]) * 1.02)
-
+    if x_which == "n":
+        xmax = max((max(xs) for xs in (
+            [x_of(r, x_which) for r in data.get(c, [])]
+            for c in curves if data.get(c)
+        )), default=32)
+        ticks = list(range(4, max(xmax, 32) + 1, 4))
+        ax.set_xticks(ticks)
     if legend_outside:
         ax.legend(
             loc="upper left",
@@ -185,105 +218,69 @@ def _plot_one(
     else:
         ax.legend(loc="best", frameon=True)
         fig.tight_layout()
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    for ext in ("pdf", "png"):
-        p = out_path.with_suffix("." + ext)
-        fig.savefig(p)
-        print(f"  wrote {p}")
+    fig.savefig(out_path.with_suffix(".pdf"))
+    fig.savefig(out_path.with_suffix(".png"))
     plt.close(fig)
+    print(f"  wrote {out_path.with_suffix('.pdf')}")
+    print(f"  wrote {out_path.with_suffix('.png')}")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Plot rdma_scal scale.csv")
-    ap.add_argument(
-        "--csv",
-        type=Path,
-        default=None,
-        help="path to scale.csv (default: <repo>/results/scale.csv)",
-    )
-    ap.add_argument(
-        "--out-dir",
-        type=Path,
-        default=None,
-        help="output directory (default: same as CSV parent)",
-    )
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--csv", type=Path, default=None)
+    ap.add_argument("--out-dir", type=Path, default=None)
+    ap.add_argument("--x", choices=["n", "q"], default="n")
     ap.add_argument(
         "--fig",
         nargs="+",
-        default=["A", "B", "C", "all"],
-        choices=["A", "B", "C", "all"],
-        help="which figures to emit",
-    )
-    ap.add_argument(
-        "--x",
-        choices=["n", "q"],
-        default="n",
-        help="x-axis: paper N, or active_q_or_dest",
-    )
-    ap.add_argument(
-        "--suffix",
-        default="",
-        help="output name suffix, e.g. _server03 for scale_fig_A_server03.pdf "
-        "(auto from CSV stem scale_<tag>.csv if omitted)",
+        default=["all", "starred", "A"],
+        choices=["all", "starred", "A"],
     )
     args = ap.parse_args()
 
     root = Path(__file__).resolve().parents[1]
     csv_path = args.csv or (root / "results" / "scale.csv")
     out_dir = args.out_dir or csv_path.parent
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     if not csv_path.is_file():
         raise SystemExit(f"CSV not found: {csv_path}")
 
-    suffix = args.suffix
-    if not suffix:
-        stem0 = csv_path.stem  # scale_server03 / scale / scale_both
-        if stem0.startswith("scale_") and stem0 != "scale_":
-            suffix = stem0[len("scale") :]  # _server03
-        elif stem0 == "scale":
-            suffix = ""
-
     data = load_csv(csv_path)
-    print(f"loaded {csv_path}: {len(data)} curves, x={args.x}, suffix={suffix!r}")
+    print(f"loaded {csv_path}: {len(data)} curves, x={args.x}")
 
-    # Prefer known style order for "all", then any extras from CSV (skip In-SEND)
-    all_curves = [c for c in CURVE_STYLE if c in data and c not in SKIP_CURVES]
-    for c in sorted(data):
-        if c not in all_curves and c not in SKIP_CURVES:
-            all_curves.append(c)
-    FIG_CURVES["all"] = all_curves
-
-    tag = suffix.lstrip("_") if suffix else ""
+    all_curves = ordered_curves(data)
     for fig_id in args.fig:
-        curves = FIG_CURVES[fig_id]
-        assert curves is not None
         if fig_id == "all":
-            figsize = (16.0, 9.0)
-            legend_outside = True
-            stem = f"scale_fig_all{suffix}"
-        elif fig_id == "A":
-            figsize = (8.0, 5.5)
-            legend_outside = False
-            stem = f"scale_fig_A{suffix}"
+            plot_one(
+                data,
+                all_curves,
+                out_dir / "scale_fig_all",
+                "All measured curves",
+                args.x,
+                figsize=(14.0, 8.0),
+                legend_outside=True,
+            )
+        elif fig_id == "starred":
+            plot_one(
+                data,
+                STARRED,
+                out_dir / "scale_fig_starred",
+                "Starred verb subset",
+                args.x,
+                figsize=(14.0, 8.0),
+                legend_outside=True,
+            )
         else:
-            figsize = (8.0, 5.5)
-            legend_outside = False
-            stem = f"scale_fig_{fig_id}{suffix}"
-
-        title = TITLES[fig_id]
-        if tag:
-            title = f"{title} [{tag}]"
-
-        _plot_one(
-            data,
-            curves,
-            out_dir / stem,
-            title,
-            args.x,
-            figsize,
-            legend_outside=legend_outside,
-        )
+            plot_one(
+                data,
+                FIG_A,
+                out_dir / "scale_fig_A",
+                "Fig.A - WRITE-UC-inl and SEND-UD-inl",
+                args.x,
+                figsize=(8.0, 5.5),
+                legend_outside=False,
+            )
 
 
 if __name__ == "__main__":

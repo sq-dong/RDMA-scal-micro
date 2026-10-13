@@ -1,0 +1,271 @@
+setup_machine.sh loaded:
+  BENCH_DIR=/home/dsq/rdma_scal
+  SRV: host=local dev=mlx5_0 ip=10.0.0.20 gid=4
+  CLT1: host=server03 dev=mlx5_3 ip=10.0.0.21 gid=3
+  CLT2: host=thoth dev=mlx5_1 ip=10.0.0.22 gid=3
+  CLT_SET=thoth  # server03 | thoth | both
+[12:12:55] CLT_SET=thoth clients=[thoth] results tag=thoth
+[12:12:55] MS pin CPUs (mlx5_0): 32 logical CPUs on NIC NUMA (e.g. 0 2 4 ...)
+[12:12:56] CLT thoth pin CPUs (mlx5_1): 144 logical CPUs
+[12:12:56] using existing run dir: /home/dsq/rdma_scal/results/thoth_30s_N*N_1
+[12:12:56] APPEND_CSV=1: appending to existing /home/dsq/rdma_scal/results/thoth_30s_N*N_1/scale.csv
+[12:12:56] sweep size=32B postlist=1 unsig=4 TPUT=30s CLT_MULT=1
+[12:12:56] N_srv in 40; N_clt = 1*N_srv
+[12:12:56] curves: in-read-rc-dma out-read-rc-dma in-write-rc-dma in-write-rc-inl out-write-rc-dma out-write-rc-inl in-write-uc-dma in-write-uc-inl out-write-uc-dma out-write-uc-inl in-send-rc-dma in-send-rc-inl out-send-rc-dma out-send-rc-inl in-send-uc-dma in-send-uc-inl out-send-uc-dma out-send-uc-inl in-send-ud-dma in-send-ud-inl out-send-ud-dma out-send-ud-inl
+[12:12:56] csv: /home/dsq/rdma_scal/results/thoth_30s_N*N_1/scale.csv
+make: Entering directory '/home/dsq/rdma_scal'
+make: Nothing to be done for 'all'.
+make: Leaving directory '/home/dsq/rdma_scal'
+[12:12:59] In-READ-RC-dma n_srv=40 n_clt=40 port=18640 count=clt [thoth]
+[12:13:32] In-READ-RC-dma n_srv=40 n_clt=40 Q=1600 total=22.00 Mops count=clt
+[12:13:32] Out-READ-RC-dma n_srv=40 n_clt=40 port=18768 count=srv [thoth]
+[12:14:08] Out-READ-RC-dma n_srv=40 n_clt=40 Q=1600 total=17.98 Mops count=srv
+[12:14:08] In-WRITE-RC-dma n_srv=40 n_clt=40 port=18896 count=clt [thoth]
+[12:14:42] In-WRITE-RC-dma n_srv=40 n_clt=40 Q=1600 total=35.20 Mops count=clt
+[12:14:42] In-WRITE-RC-inl n_srv=40 n_clt=40 port=19024 count=clt [thoth]
+[12:15:16] In-WRITE-RC-inl n_srv=40 n_clt=40 Q=1600 total=20.91 Mops count=clt
+[12:15:16] Out-WRITE-RC-dma n_srv=40 n_clt=40 port=19152 count=srv [thoth]
+[12:15:52] Out-WRITE-RC-dma n_srv=40 n_clt=40 Q=1600 total=17.07 Mops count=srv
+[12:15:52] Out-WRITE-RC-inl n_srv=40 n_clt=40 port=19280 count=srv [thoth]
+[12:16:28] Out-WRITE-RC-inl n_srv=40 n_clt=40 Q=1600 total=20.84 Mops count=srv
+[12:16:28] In-WRITE-UC-dma n_srv=40 n_clt=40 port=19408 count=clt [thoth]
+[12:17:01] In-WRITE-UC-dma n_srv=40 n_clt=40 Q=1600 total=38.26 Mops count=clt
+[12:17:01] In-WRITE-UC-inl n_srv=40 n_clt=40 port=19536 count=clt [thoth]
+[12:19:08] In-WRITE-UC-inl n_srv=40 n_clt=40 Q=1600 total=120.02 Mops count=clt
+[12:19:08] Out-WRITE-UC-dma n_srv=40 n_clt=40 port=19664 count=srv [thoth]
+[12:19:43] Out-WRITE-UC-dma n_srv=40 n_clt=40 Q=1600 total=20.37 Mops count=srv
+[12:19:43] Out-WRITE-UC-inl n_srv=40 n_clt=40 port=19792 count=srv [thoth]
+[12:20:19] Out-WRITE-UC-inl n_srv=40 n_clt=40 Q=1600 total=25.44 Mops count=srv
+[12:20:19] In-SEND-RC-dma n_srv=40 n_clt=40 port=19920 count=clt [thoth]
+[12:20:53] In-SEND-RC-dma n_srv=40 n_clt=40 Q=1600 total=17.62 Mops count=clt
+[12:20:53] In-SEND-RC-inl n_srv=40 n_clt=40 port=20048 count=clt [thoth]
+[12:21:28] In-SEND-RC-inl n_srv=40 n_clt=40 Q=1600 total=11.09 Mops count=clt
+[12:21:28] Out-SEND-RC-dma n_srv=40 n_clt=40 port=20176 count=clt [thoth]
+[12:22:01] Out-SEND-RC-dma n_srv=40 n_clt=40 Q=1600 total=14.00 Mops count=clt
+[12:22:01] Out-SEND-RC-inl n_srv=40 n_clt=40 port=20304 count=clt [thoth]
+[12:22:36] Out-SEND-RC-inl n_srv=40 n_clt=40 Q=1600 total=21.60 Mops count=clt
+[12:22:36] In-SEND-UC-dma n_srv=40 n_clt=40 port=20432 count=clt [thoth]
+[12:23:10] In-SEND-UC-dma n_srv=40 n_clt=40 Q=1600 total=31.20 Mops count=clt
+[12:23:10] In-SEND-UC-inl n_srv=40 n_clt=40 port=20560 count=clt [thoth]
+[12:23:45] In-SEND-UC-inl n_srv=40 n_clt=40 Q=1600 total=83.55 Mops count=clt
+[12:23:45] Out-SEND-UC-dma n_srv=40 n_clt=40 port=20688 count=srv [thoth]
+[12:24:21] Out-SEND-UC-dma n_srv=40 n_clt=40 Q=1600 total=15.96 Mops count=srv
+[12:24:21] Out-SEND-UC-inl n_srv=40 n_clt=40 port=20816 count=srv [thoth]
+[12:24:57] Out-SEND-UC-inl n_srv=40 n_clt=40 Q=1600 total=26.94 Mops count=srv
+[12:24:57] In-SEND-UD-dma n_srv=40 n_clt=40 port=20944 count=clt [thoth]
+[12:25:44] In-SEND-UD-dma n_srv=40 n_clt=40 Q=40 total=53.57 Mops count=clt
+[12:25:44] In-SEND-UD-inl n_srv=40 n_clt=40 port=21072 count=clt [thoth]
+[12:27:10] In-SEND-UD-inl n_srv=40 n_clt=40 Q=40 total=122.12 Mops count=clt
+[12:27:10] Out-SEND-UD-dma n_srv=40 n_clt=40 port=21200 count=clt [thoth]
+[12:27:43] Out-SEND-UD-dma n_srv=40 n_clt=40 Q=1600 total=49.20 Mops count=clt
+[12:27:43] Out-SEND-UD-inl n_srv=40 n_clt=40 port=21328 count=clt [thoth]
+[12:28:17] Out-SEND-UD-inl n_srv=40 n_clt=40 Q=1600 total=54.61 Mops count=clt
+[12:28:17] done: /home/dsq/rdma_scal/results/thoth_30s_N*N_1/scale.csv
+curve             n_srv  n_clt  active_q_or_dest  mops    size  postlist  unsig  inline  clients  count_side
+In-READ-RC-dma    1      1      1                 1.34    32    1         4      0       thoth    clt
+In-READ-RC-dma    2      2      4                 5.24    32    1         4      0       thoth    clt
+In-READ-RC-dma    4      4      16                20.29   32    1         4      0       thoth    clt
+In-READ-RC-dma    8      8      64                38.51   32    1         4      0       thoth    clt
+In-READ-RC-dma    12     12     144               36.28   32    1         4      0       thoth    clt
+In-READ-RC-dma    16     16     256               33.76   32    1         4      0       thoth    clt
+In-READ-RC-dma    24     24     576               29.01   32    1         4      0       thoth    clt
+In-READ-RC-dma    32     32     1024              31.68   32    1         4      0       thoth    clt
+Out-READ-RC-dma   1      1      1                 1.5     32    1         4      0       thoth    srv
+Out-READ-RC-dma   2      2      4                 5.42    32    1         4      0       thoth    srv
+Out-READ-RC-dma   4      4      16                20.35   32    1         4      0       thoth    srv
+Out-READ-RC-dma   8      8      64                47.33   32    1         4      0       thoth    srv
+Out-READ-RC-dma   12     12     144               48.45   32    1         4      0       thoth    srv
+Out-READ-RC-dma   16     16     256               47.09   32    1         4      0       thoth    srv
+Out-READ-RC-dma   24     24     576               27.44   32    1         4      0       thoth    srv
+Out-READ-RC-dma   32     32     1024              13.63   32    1         4      0       thoth    srv
+In-WRITE-RC-dma   1      1      1                 1.34    32    1         4      0       thoth    clt
+In-WRITE-RC-dma   2      2      4                 4.90    32    1         4      0       thoth    clt
+In-WRITE-RC-dma   4      4      16                19.74   32    1         4      0       thoth    clt
+In-WRITE-RC-dma   8      8      64                38.36   32    1         4      0       thoth    clt
+In-WRITE-RC-dma   12     12     144               52.27   32    1         4      0       thoth    clt
+In-WRITE-RC-dma   16     16     256               26.88   32    1         4      0       thoth    clt
+In-WRITE-RC-dma   24     24     576               27.84   32    1         4      0       thoth    clt
+In-WRITE-RC-dma   32     32     1024              45.76   32    1         4      0       thoth    clt
+In-WRITE-RC-inl   1      1      1                 1.60    32    1         4      1       thoth    clt
+In-WRITE-RC-inl   2      2      4                 6.26    32    1         4      1       thoth    clt
+In-WRITE-RC-inl   4      4      16                11.74   32    1         4      1       thoth    clt
+In-WRITE-RC-inl   8      8      64                35.80   32    1         4      1       thoth    clt
+In-WRITE-RC-inl   12     12     144               53.15   32    1         4      1       thoth    clt
+In-WRITE-RC-inl   16     16     256               24.96   32    1         4      1       thoth    clt
+In-WRITE-RC-inl   24     24     576               27.23   32    1         4      1       thoth    clt
+In-WRITE-RC-inl   32     32     1024              38.06   32    1         4      1       thoth    clt
+Out-WRITE-RC-dma  1      1      1                 1.65    32    1         4      0       thoth    srv
+Out-WRITE-RC-dma  2      2      4                 6.17    32    1         4      0       thoth    srv
+Out-WRITE-RC-dma  4      4      16                21.57   32    1         4      0       thoth    srv
+Out-WRITE-RC-dma  8      8      64                48.9    32    1         4      0       thoth    srv
+Out-WRITE-RC-dma  12     12     144               40.6    32    1         4      0       thoth    srv
+Out-WRITE-RC-dma  16     16     256               25.28   32    1         4      0       thoth    srv
+Out-WRITE-RC-dma  24     24     576               21.8    32    1         4      0       thoth    srv
+Out-WRITE-RC-dma  32     32     1024              24.65   32    1         4      0       thoth    srv
+Out-WRITE-RC-inl  1      1      1                 1.97    32    1         4      1       thoth    srv
+Out-WRITE-RC-inl  2      2      4                 7.5     32    1         4      1       thoth    srv
+Out-WRITE-RC-inl  4      4      16                24.86   32    1         4      1       thoth    srv
+Out-WRITE-RC-inl  8      8      64                46.43   32    1         4      1       thoth    srv
+Out-WRITE-RC-inl  12     12     144               64.44   32    1         4      1       thoth    srv
+Out-WRITE-RC-inl  16     16     256               52.89   32    1         4      1       thoth    srv
+Out-WRITE-RC-inl  24     24     576               26.97   32    1         4      1       thoth    srv
+Out-WRITE-RC-inl  32     32     1024              30.27   32    1         4      1       thoth    srv
+In-WRITE-UC-dma   1      1      1                 2.20    32    1         4      0       thoth    clt
+In-WRITE-UC-dma   2      2      4                 6.33    32    1         4      0       thoth    clt
+In-WRITE-UC-dma   4      4      16                20.18   32    1         4      0       thoth    clt
+In-WRITE-UC-dma   8      8      64                38.08   32    1         4      0       thoth    clt
+In-WRITE-UC-dma   12     12     144               53.93   32    1         4      0       thoth    clt
+In-WRITE-UC-dma   16     16     256               52.00   32    1         4      0       thoth    clt
+In-WRITE-UC-dma   24     24     576               44.76   32    1         4      0       thoth    clt
+In-WRITE-UC-dma   32     32     1024              47.36   32    1         4      0       thoth    clt
+In-WRITE-UC-inl   1      1      1                 3.35    32    1         4      1       thoth    clt
+In-WRITE-UC-inl   2      2      4                 6.11    32    1         4      1       thoth    clt
+In-WRITE-UC-inl   4      4      16                11.72   32    1         4      1       thoth    clt
+In-WRITE-UC-inl   8      8      64                35.48   32    1         4      1       thoth    clt
+In-WRITE-UC-inl   12     12     144               53.30   32    1         4      1       thoth    clt
+In-WRITE-UC-inl   16     16     256               68.45   32    1         4      1       thoth    clt
+In-WRITE-UC-inl   24     24     576               50.62   32    1         4      1       thoth    clt
+In-WRITE-UC-inl   32     32     1024              49.57   32    1         4      1       thoth    clt
+Out-WRITE-UC-dma  1      1      1                 2.96    32    1         4      0       thoth    srv
+Out-WRITE-UC-dma  2      2      4                 10.39   32    1         4      0       thoth    srv
+Out-WRITE-UC-dma  4      4      16                26.47   32    1         4      0       thoth    srv
+Out-WRITE-UC-dma  8      8      64                49.51   32    1         4      0       thoth    srv
+Out-WRITE-UC-dma  12     12     144               36.96   32    1         4      0       thoth    srv
+Out-WRITE-UC-dma  16     16     256               24.64   32    1         4      0       thoth    srv
+Out-WRITE-UC-dma  24     24     576               22.0    32    1         4      0       thoth    srv
+Out-WRITE-UC-dma  32     32     1024              24.62   32    1         4      0       thoth    srv
+Out-WRITE-UC-inl  1      1      1                 5.35    32    1         4      1       thoth    srv
+Out-WRITE-UC-inl  2      2      4                 12.62   32    1         4      1       thoth    srv
+Out-WRITE-UC-inl  4      4      16                24.86   32    1         4      1       thoth    srv
+Out-WRITE-UC-inl  8      8      64                47.36   32    1         4      1       thoth    srv
+Out-WRITE-UC-inl  12     12     144               65.22   32    1         4      1       thoth    srv
+Out-WRITE-UC-inl  16     16     256               32.48   32    1         4      1       thoth    srv
+Out-WRITE-UC-inl  24     24     576               26.69   32    1         4      1       thoth    srv
+Out-WRITE-UC-inl  32     32     1024              32.14   32    1         4      1       thoth    srv
+In-SEND-RC-dma    1      1      1                 1.32    32    1         4      0       thoth    clt
+In-SEND-RC-dma    2      2      4                 5.07    32    1         4      0       thoth    clt
+In-SEND-RC-dma    4      4      16                19.74   32    1         4      0       thoth    clt
+In-SEND-RC-dma    8      8      64                38.37   32    1         4      0       thoth    clt
+In-SEND-RC-dma    12     12     144               48.68   32    1         4      0       thoth    clt
+In-SEND-RC-dma    16     16     256               29.44   32    1         4      0       thoth    clt
+In-SEND-RC-dma    24     24     576               26.40   32    1         4      0       thoth    clt
+In-SEND-RC-dma    32     32     1024              33.30   32    1         4      0       thoth    clt
+In-SEND-RC-inl    1      1      1                 1.65    32    1         4      1       thoth    clt
+In-SEND-RC-inl    2      2      4                 6.43    32    1         4      1       thoth    clt
+In-SEND-RC-inl    4      4      16                12.34   32    1         4      1       thoth    clt
+In-SEND-RC-inl    8      8      64                23.68   32    1         4      1       thoth    clt
+In-SEND-RC-inl    12     12     144               56.59   32    1         4      1       thoth    clt
+In-SEND-RC-inl    16     16     256               17.12   32    1         4      1       thoth    clt
+In-SEND-RC-inl    24     24     576               22.88   32    1         4      1       thoth    clt
+In-SEND-RC-inl    32     32     1024              14.82   32    1         4      1       thoth    clt
+Out-SEND-RC-dma   1      1      1                 1.66    32    1         4      0       thoth    clt
+Out-SEND-RC-dma   2      2      4                 6.30    32    1         4      0       thoth    clt
+Out-SEND-RC-dma   4      4      16                21.92   32    1         4      0       thoth    clt
+Out-SEND-RC-dma   8      8      64                48.96   32    1         4      0       thoth    clt
+Out-SEND-RC-dma   12     12     144               37.80   32    1         4      0       thoth    clt
+Out-SEND-RC-dma   16     16     256               20.16   32    1         4      0       thoth    clt
+Out-SEND-RC-dma   24     24     576               16.56   32    1         4      0       thoth    clt
+Out-SEND-RC-dma   32     32     1024              17.60   32    1         4      0       thoth    clt
+Out-SEND-RC-inl   1      1      1                 2.04    32    1         4      1       thoth    clt
+Out-SEND-RC-inl   2      2      4                 7.76    32    1         4      1       thoth    clt
+Out-SEND-RC-inl   4      4      16                26.60   32    1         4      1       thoth    clt
+Out-SEND-RC-inl   8      8      64                50.15   32    1         4      1       thoth    clt
+Out-SEND-RC-inl   12     12     144               69.60   32    1         4      1       thoth    clt
+Out-SEND-RC-inl   16     16     256               55.36   32    1         4      1       thoth    clt
+Out-SEND-RC-inl   24     24     576               54.24   32    1         4      1       thoth    clt
+Out-SEND-RC-inl   32     32     1024              32.96   32    1         4      1       thoth    clt
+In-SEND-UC-dma    1      1      1                 2.17    32    1         4      0       thoth    clt
+In-SEND-UC-dma    2      2      4                 6.38    32    1         4      0       thoth    clt
+In-SEND-UC-dma    4      4      16                20.33   32    1         4      0       thoth    clt
+In-SEND-UC-dma    8      8      64                39.10   32    1         4      0       thoth    clt
+In-SEND-UC-dma    12     12     144               49.42   32    1         4      0       thoth    clt
+In-SEND-UC-dma    16     16     256               44.48   32    1         4      0       thoth    clt
+In-SEND-UC-dma    24     24     576               35.76   32    1         4      0       thoth    clt
+In-SEND-UC-dma    32     32     1024              35.84   32    1         4      0       thoth    clt
+In-SEND-UC-inl    1      1      1                 3.40    32    1         4      1       thoth    clt
+In-SEND-UC-inl    2      2      4                 6.26    32    1         4      1       thoth    clt
+In-SEND-UC-inl    4      4      16                12.36   32    1         4      1       thoth    clt
+In-SEND-UC-inl    8      8      64                23.74   32    1         4      1       thoth    clt
+In-SEND-UC-inl    12     12     144               56.80   32    1         4      1       thoth    clt
+In-SEND-UC-inl    16     16     256               74.86   32    1         4      1       thoth    clt
+In-SEND-UC-inl    24     24     576               92.36   32    1         4      1       thoth    clt
+In-SEND-UC-inl    32     32     1024              89.38   32    1         4      1       thoth    clt
+Out-SEND-UC-dma   1      1      1                 3.02    32    1         4      0       thoth    srv
+Out-SEND-UC-dma   2      2      4                 10.4    32    1         4      0       thoth    srv
+Out-SEND-UC-dma   4      4      16                26.12   32    1         4      0       thoth    srv
+Out-SEND-UC-dma   8      8      64                49.31   32    1         4      0       thoth    srv
+Out-SEND-UC-dma   12     12     144               30.17   32    1         4      0       thoth    srv
+Out-SEND-UC-dma   16     16     256               20.32   32    1         4      0       thoth    srv
+Out-SEND-UC-dma   24     24     576               17.22   32    1         4      0       thoth    srv
+Out-SEND-UC-dma   32     32     1024              18.88   32    1         4      0       thoth    srv
+Out-SEND-UC-inl   1      1      1                 5.91    32    1         4      1       thoth    srv
+Out-SEND-UC-inl   2      2      4                 13.58   32    1         4      1       thoth    srv
+Out-SEND-UC-inl   4      4      16                26.79   32    1         4      1       thoth    srv
+Out-SEND-UC-inl   8      8      64                50.86   32    1         4      1       thoth    srv
+Out-SEND-UC-inl   12     12     144               69.99   32    1         4      1       thoth    srv
+Out-SEND-UC-inl   16     16     256               48.15   32    1         4      1       thoth    srv
+Out-SEND-UC-inl   24     24     576               27.93   32    1         4      1       thoth    srv
+Out-SEND-UC-inl   32     32     1024              33.92   32    1         4      1       thoth    srv
+In-SEND-UD-dma    1      1      1                 2.03    32    1         4      0       thoth    clt
+In-SEND-UD-dma    2      2      2                 4.04    32    1         4      0       thoth    clt
+In-SEND-UD-dma    4      4      4                 7.39    32    1         4      0       thoth    clt
+In-SEND-UD-dma    8      8      8                 17.73   32    1         4      0       thoth    clt
+In-SEND-UD-dma    12     12     12                24.73   32    1         4      0       thoth    clt
+In-SEND-UD-dma    16     16     16                32.40   32    1         4      0       thoth    clt
+In-SEND-UD-dma    24     24     24                45.06   32    1         4      0       thoth    clt
+In-SEND-UD-dma    32     32     32                51.02   32    1         4      0       thoth    clt
+In-SEND-UD-inl    1      1      1                 3.26    32    1         4      1       thoth    clt
+In-SEND-UD-inl    2      2      2                 5.99    32    1         4      1       thoth    clt
+In-SEND-UD-inl    4      4      4                 11.82   32    1         4      1       thoth    clt
+In-SEND-UD-inl    8      8      8                 33.12   32    1         4      1       thoth    clt
+In-SEND-UD-inl    12     12     12                48.33   32    1         4      1       thoth    clt
+In-SEND-UD-inl    16     16     16                62.31   32    1         4      1       thoth    clt
+In-SEND-UD-inl    24     24     24                84.53   32    1         4      1       thoth    clt
+In-SEND-UD-inl    32     32     32                123.08  32    1         4      1       thoth    clt
+Out-SEND-UD-dma   1      1      1                 2.90    32    1         4      0       thoth    clt
+Out-SEND-UD-dma   2      2      4                 5.50    32    1         4      0       thoth    clt
+Out-SEND-UD-dma   4      4      16                10.56   32    1         4      0       thoth    clt
+Out-SEND-UD-dma   8      8      64                19.76   32    1         4      0       thoth    clt
+Out-SEND-UD-dma   12     12     144               27.84   32    1         4      0       thoth    clt
+Out-SEND-UD-dma   16     16     256               35.36   32    1         4      0       thoth    clt
+Out-SEND-UD-dma   24     24     576               47.04   32    1         4      0       thoth    clt
+Out-SEND-UD-dma   32     32     1024              10.41   32    1         4      0       thoth    clt
+Out-SEND-UD-inl   1      1      1                 5.30    32    1         4      1       thoth    clt
+Out-SEND-UD-inl   2      2      4                 10.68   32    1         4      1       thoth    clt
+Out-SEND-UD-inl   4      4      16                20.08   32    1         4      1       thoth    clt
+Out-SEND-UD-inl   8      8      64                38.96   32    1         4      1       thoth    clt
+Out-SEND-UD-inl   12     12     144               54.84   32    1         4      1       thoth    clt
+Out-SEND-UD-inl   16     16     256               69.60   32    1         4      1       thoth    clt
+Out-SEND-UD-inl   24     24     576               80.16   32    1         4      1       thoth    clt
+Out-SEND-UD-inl   32     32     1024              79.36   32    1         4      1       thoth    clt
+In-READ-RC-dma    40     40     1600              22.00   32    1         4      0       thoth    clt
+Out-READ-RC-dma   40     40     1600              17.98   32    1         4      0       thoth    srv
+In-WRITE-RC-dma   40     40     1600              35.20   32    1         4      0       thoth    clt
+In-WRITE-RC-inl   40     40     1600              20.91   32    1         4      1       thoth    clt
+Out-WRITE-RC-dma  40     40     1600              17.07   32    1         4      0       thoth    srv
+Out-WRITE-RC-inl  40     40     1600              20.84   32    1         4      1       thoth    srv
+In-WRITE-UC-dma   40     40     1600              38.26   32    1         4      0       thoth    clt
+In-WRITE-UC-inl   40     40     1600              120.02  32    1         4      1       thoth    clt
+Out-WRITE-UC-dma  40     40     1600              20.37   32    1         4      0       thoth    srv
+Out-WRITE-UC-inl  40     40     1600              25.44   32    1         4      1       thoth    srv
+In-SEND-RC-dma    40     40     1600              17.62   32    1         4      0       thoth    clt
+In-SEND-RC-inl    40     40     1600              11.09   32    1         4      1       thoth    clt
+Out-SEND-RC-dma   40     40     1600              14.00   32    1         4      0       thoth    clt
+Out-SEND-RC-inl   40     40     1600              21.60   32    1         4      1       thoth    clt
+In-SEND-UC-dma    40     40     1600              31.20   32    1         4      0       thoth    clt
+In-SEND-UC-inl    40     40     1600              83.55   32    1         4      1       thoth    clt
+Out-SEND-UC-dma   40     40     1600              15.96   32    1         4      0       thoth    srv
+Out-SEND-UC-inl   40     40     1600              26.94   32    1         4      1       thoth    srv
+In-SEND-UD-dma    40     40     40                53.57   32    1         4      0       thoth    clt
+In-SEND-UD-inl    40     40     40                122.12  32    1         4      1       thoth    clt
+Out-SEND-UD-dma   40     40     1600              49.20   32    1         4      0       thoth    clt
+Out-SEND-UD-inl   40     40     1600              54.61   32    1         4      1       thoth    clt
+[12:28:17] plotting into /home/dsq/rdma_scal/results/thoth_30s_N*N_1
+loaded /home/dsq/rdma_scal/results/thoth_30s_N*N_1/scale.csv: 22 curves, x=n
+  wrote /home/dsq/rdma_scal/results/thoth_30s_N*N_1/scale_fig_all.pdf
+  wrote /home/dsq/rdma_scal/results/thoth_30s_N*N_1/scale_fig_all.png
+  wrote /home/dsq/rdma_scal/results/thoth_30s_N*N_1/scale_fig_starred.pdf
+  wrote /home/dsq/rdma_scal/results/thoth_30s_N*N_1/scale_fig_starred.png
+  wrote /home/dsq/rdma_scal/results/thoth_30s_N*N_1/scale_fig_A.pdf
+  wrote /home/dsq/rdma_scal/results/thoth_30s_N*N_1/scale_fig_A.png
+[12:28:19] plot done

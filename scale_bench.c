@@ -1,12 +1,12 @@
 /*
  * scale_bench.c - RDMA scalability microbenchmark.
  *
- * Two machines, N processes per side:
- *   out-write / in-write / out-read : N QPs per process (N*N active QPs)
- *   out-send-ud : N server procs x N client procs; each server has 1 UD QP + N AHs
- *   in-send-ud  : N client UD QPs send to 1 server UD QP (recv)
+ * Asymmetric mesh: server processes and client processes need not be equal.
+ *   -q PEERS : number of remote peers (connected QPs, or UD AH destinations)
+ *   -I ID    : local process id
  *
- * Bootstrap: TCP exchange of QP endpoints.
+ * Modes: out-write|in-write|out-read|in-read|out-send|in-send
+ * Transport: --rc|--uc|--ud (UD only valid for send)
  */
 
 #include "common.h"
@@ -21,38 +21,44 @@ enum scale_mode {
   MODE_OUT_WRITE = 0,
   MODE_IN_WRITE,
   MODE_OUT_READ,
-  MODE_OUT_SEND_UD,
-  MODE_IN_SEND_UD,
+  MODE_IN_READ,
+  MODE_OUT_SEND,
+  MODE_IN_SEND,
+};
+
+enum transport {
+  XPORT_RC = 0,
+  XPORT_UC,
+  XPORT_UD,
 };
 
 struct cfg {
-  int is_server; /* TCP listen (-s) vs connect (-c) */
+  int is_server;
   char *dev;
   char *ip;
   uint16_t port;
   int gid_index;
   int size;
-  int paper_n;
+  int n_peer;
   int proc_id;
   int unsig;
   int postlist;
   int duration;
   int use_inline;
-  int use_uc; /* ignored for READ / UD */
+  enum transport xport;
   enum scale_mode mode;
-  int pin_cpu; /* >=0: sched_setaffinity to this CPU; -1: no pin */
+  int pin_cpu;
 };
 
 static void usage(const char *a) {
   fprintf(stderr,
-          "Usage: %s -s|-c -d DEV -a IP -I ID -q N [-p PORT] [-x GID]\n"
-          "  -M out-write|in-write|out-read|out-send-ud|in-send-ud\n"
+          "Usage: %s -s|-c -d DEV -a IP -I ID -q PEERS [-p PORT] [-x GID]\n"
+          "  -M out-write|in-write|out-read|in-read|out-send|in-send\n"
           "  [-t POSTLIST] [-l SIZE] [-Q UNSIG] [-D SEC] [-C CPU]\n"
-          "  [--no-inline] [--rc|--uc]\n"
-          "  -q N : procs per side (connected ⇒ N² QPs)\n"
-          "  -I   : process id in 0..N-1\n"
-          "  -C   : pin this process to logical CPU (NIC NUMA-local preferred)\n"
-          "  -a   : MS RDMA IPv4 (TCP bind/connect target)\n",
+          "  [--no-inline] [--rc|--uc|--ud]\n"
+          "  -q PEERS : remote peer count (QPs or UD destinations)\n"
+          "  -I       : process id (>= 0)\n"
+          "  -a       : server RoCE IPv4 (TCP bind/connect target)\n",
           a);
   exit(1);
 }
@@ -64,43 +70,78 @@ static enum scale_mode parse_mode(const char *s) {
     return MODE_IN_WRITE;
   if (!strcmp(s, "out-read"))
     return MODE_OUT_READ;
-  if (!strcmp(s, "out-send-ud"))
-    return MODE_OUT_SEND_UD;
-  if (!strcmp(s, "in-send-ud"))
-    return MODE_IN_SEND_UD;
+  if (!strcmp(s, "in-read"))
+    return MODE_IN_READ;
+  if (!strcmp(s, "out-send") || !strcmp(s, "out-send-ud"))
+    return MODE_OUT_SEND;
+  if (!strcmp(s, "in-send") || !strcmp(s, "in-send-ud"))
+    return MODE_IN_SEND;
   fprintf(stderr, "unknown mode %s\n", s);
   usage("scale_bench");
   return MODE_OUT_WRITE;
 }
 
-static const char *mode_name(enum scale_mode m, int use_uc, int use_inline) {
+static const char *mode_name(const struct cfg *c) {
   static char buf[64];
-  const char *base = "Out-WRITE";
-  switch (m) {
+  const char *verb = "WRITE";
+  const char *dir = "Out";
+  switch (c->mode) {
   case MODE_OUT_WRITE:
-    base = "Out-WRITE";
+    dir = "Out";
+    verb = "WRITE";
     break;
   case MODE_IN_WRITE:
-    base = "In-WRITE";
+    dir = "In";
+    verb = "WRITE";
     break;
   case MODE_OUT_READ:
-    base = "Out-READ";
+    dir = "Out";
+    verb = "READ";
     break;
-  case MODE_OUT_SEND_UD:
-    base = "Out-SEND-UD";
+  case MODE_IN_READ:
+    dir = "In";
+    verb = "READ";
     break;
-  case MODE_IN_SEND_UD:
-    base = "In-SEND-UD";
+  case MODE_OUT_SEND:
+    dir = "Out";
+    verb = "SEND";
+    break;
+  case MODE_IN_SEND:
+    dir = "In";
+    verb = "SEND";
     break;
   }
-  if (m == MODE_OUT_SEND_UD || m == MODE_IN_SEND_UD)
-    snprintf(buf, sizeof(buf), "%s-%s", base, use_inline ? "inl" : "dma");
-  else if (m == MODE_OUT_READ)
-    snprintf(buf, sizeof(buf), "%s-RC-%s", base, use_inline ? "inl" : "dma");
+  const char *xp = (c->xport == XPORT_UD) ? "UD" : (c->xport == XPORT_UC) ? "UC" : "RC";
+  const char *inl = c->use_inline ? "inl" : "dma";
+  if (c->mode == MODE_OUT_READ || c->mode == MODE_IN_READ)
+    snprintf(buf, sizeof(buf), "%s-%s-%s-%s", dir, verb, "RC", inl);
+  else if (c->mode == MODE_OUT_SEND || c->mode == MODE_IN_SEND)
+    snprintf(buf, sizeof(buf), "%s-%s-%s-%s", dir, verb, xp, inl);
   else
-    snprintf(buf, sizeof(buf), "%s-%s-%s", base, use_uc ? "UC" : "RC",
-             use_inline ? "inl" : "dma");
+    snprintf(buf, sizeof(buf), "%s-%s-%s-%s", dir, verb, xp, inl);
   return buf;
+}
+
+static int is_send_mode(enum scale_mode m) {
+  return m == MODE_OUT_SEND || m == MODE_IN_SEND;
+}
+
+static int is_read_mode(enum scale_mode m) {
+  return m == MODE_OUT_READ || m == MODE_IN_READ;
+}
+
+static int i_am_requester(const struct cfg *c) {
+  switch (c->mode) {
+  case MODE_OUT_WRITE:
+  case MODE_OUT_READ:
+  case MODE_OUT_SEND:
+    return c->is_server;
+  case MODE_IN_WRITE:
+  case MODE_IN_READ:
+  case MODE_IN_SEND:
+    return !c->is_server;
+  }
+  return 0;
 }
 
 static void parse(int argc, char **argv, struct cfg *c) {
@@ -108,19 +149,20 @@ static void parse(int argc, char **argv, struct cfg *c) {
   c->port = 18640;
   c->gid_index = 3;
   c->size = 32;
-  c->paper_n = 1;
+  c->n_peer = 1;
   c->proc_id = 0;
   c->unsig = 4;
   c->postlist = 1;
   c->duration = 5;
   c->use_inline = 1;
-  c->use_uc = 1;
+  c->xport = XPORT_UC;
   c->is_server = -1;
   c->mode = MODE_OUT_WRITE;
   c->pin_cpu = -1;
   static struct option longopts[] = {{"no-inline", no_argument, 0, 1001},
                                      {"rc", no_argument, 0, 1002},
                                      {"uc", no_argument, 0, 1003},
+                                     {"ud", no_argument, 0, 1004},
                                      {0, 0, 0, 0}};
   int opt;
   while ((opt = getopt_long(argc, argv, "scd:a:p:x:l:q:I:t:Q:D:M:C:h", longopts,
@@ -148,7 +190,7 @@ static void parse(int argc, char **argv, struct cfg *c) {
       c->size = atoi(optarg);
       break;
     case 'q':
-      c->paper_n = atoi(optarg);
+      c->n_peer = atoi(optarg);
       break;
     case 'I':
       c->proc_id = atoi(optarg);
@@ -163,6 +205,8 @@ static void parse(int argc, char **argv, struct cfg *c) {
       c->duration = atoi(optarg);
       break;
     case 'M':
+      if (!strcmp(optarg, "out-send-ud") || !strcmp(optarg, "in-send-ud"))
+        c->xport = XPORT_UD;
       c->mode = parse_mode(optarg);
       break;
     case 'C':
@@ -172,10 +216,13 @@ static void parse(int argc, char **argv, struct cfg *c) {
       c->use_inline = 0;
       break;
     case 1002:
-      c->use_uc = 0;
+      c->xport = XPORT_RC;
       break;
     case 1003:
-      c->use_uc = 1;
+      c->xport = XPORT_UC;
+      break;
+    case 1004:
+      c->xport = XPORT_UD;
       break;
     default:
       usage(argv[0]);
@@ -183,19 +230,29 @@ static void parse(int argc, char **argv, struct cfg *c) {
   }
   if (c->is_server < 0 || !c->dev || !c->ip)
     usage(argv[0]);
-  if (c->paper_n < 1 || c->paper_n > VT_MAX_QPS) {
-    fprintf(stderr, "paper N (-q) must be 1..%d\n", VT_MAX_QPS);
+  if (c->n_peer < 1 || c->n_peer > VT_MAX_QPS) {
+    fprintf(stderr, "-q PEERS must be 1..%d\n", VT_MAX_QPS);
     exit(1);
   }
-  if (c->proc_id < 0 || c->proc_id >= c->paper_n) {
-    fprintf(stderr, "-I id must be in 0..N-1 (N=%d)\n", c->paper_n);
+  if (c->n_peer > 255) {
+    fprintf(stderr, "-q PEERS must be <= 255 (TCP peer id is 1 byte)\n");
     exit(1);
   }
-  if (c->mode == MODE_OUT_READ)
-    c->use_uc = 0; /* READ requires RC */
-  /* in-send-ud: single MS receiver QP (-I 0 only). out-send-ud: all N MS procs. */
-  if (c->mode == MODE_IN_SEND_UD && c->is_server && c->proc_id != 0) {
-    fprintf(stderr, "In-SEND-UD MS side: only -I 0 participates as the single QP\n");
+  if (c->proc_id < 0) {
+    fprintf(stderr, "-I id must be >= 0\n");
+    exit(1);
+  }
+  if (is_read_mode(c->mode)) {
+    if (c->xport != XPORT_RC)
+      c->xport = XPORT_RC;
+  }
+  if (!is_send_mode(c->mode) && c->xport == XPORT_UD) {
+    fprintf(stderr, "UD is only valid for out-send/in-send\n");
+    exit(1);
+  }
+  if (c->mode == MODE_IN_SEND && c->xport == XPORT_UD && c->is_server &&
+      c->proc_id != 0) {
+    fprintf(stderr, "In-SEND-UD server side: only -I 0\n");
     exit(1);
   }
   if (c->unsig < 1)
@@ -230,24 +287,38 @@ static struct ibv_qp *create_qp(struct vt_ctx *v, struct ibv_cq *scq,
   return qp;
 }
 
-static void ud_post_recv(struct ibv_qp *qp, struct vt_ctx *v, uint64_t id) {
-  /* UD GRH needs 40B headroom in the recv buffer. */
+static void post_recv(struct ibv_qp *qp, struct vt_ctx *v, uint64_t id,
+                      int is_ud) {
   struct ibv_sge sge = {.addr = (uintptr_t)v->buf,
                         .length = (uint32_t)v->buf_size,
                         .lkey = v->mr->lkey};
+  (void)is_ud;
   struct ibv_recv_wr wr = {.wr_id = id, .sg_list = &sge, .num_sge = 1};
   struct ibv_recv_wr *bad = NULL;
   VT_CHECK(ibv_post_recv(qp, &wr, &bad) == 0, "post_recv");
 }
 
-static void poll_one(struct ibv_cq *cq) {
+/* Wait for one WC. Returns 0 on success, -1 if deadline_ns is reached with no
+ * completion (avoids infinite spin when the peer has already exited). */
+static int poll_one_until(struct ibv_cq *cq, uint64_t deadline_ns) {
   struct ibv_wc wc;
-  while (ibv_poll_cq(cq, 1, &wc) == 0)
-    ;
+  uint64_t spins = 0;
+  for (;;) {
+    int n = ibv_poll_cq(cq, 1, &wc);
+    if (n > 0)
+      break;
+    if (n < 0) {
+      fprintf(stderr, "poll_cq failed\n");
+      exit(1);
+    }
+    if ((++spins & 1023) == 0 && vt_ns() >= deadline_ns)
+      return -1;
+  }
   if (wc.status != IBV_WC_SUCCESS) {
     fprintf(stderr, "wc %s\n", ibv_wc_status_str(wc.status));
     exit(1);
   }
+  return 0;
 }
 
 static struct ibv_ah *make_ah(struct vt_ctx *v,
@@ -255,8 +326,6 @@ static struct ibv_ah *make_ah(struct vt_ctx *v,
   struct ibv_ah_attr ah_attr;
   memset(&ah_attr, 0, sizeof(ah_attr));
   ah_attr.port_num = (uint8_t)v->port;
-  ah_attr.sl = 0;
-  ah_attr.src_path_bits = 0;
   if (v->is_roce || remote->is_roce) {
     ah_attr.is_global = 1;
     ah_attr.dlid = 0;
@@ -337,24 +406,6 @@ static void mesh_connect_exchange(struct cfg *c, struct vt_endpoint *locals,
   }
 }
 
-/* True if this process posts RDMA ops (throughput reporter). */
-static int i_am_sender(const struct cfg *c) {
-  switch (c->mode) {
-  case MODE_OUT_WRITE:
-  case MODE_OUT_READ:
-  case MODE_OUT_SEND_UD:
-    return c->is_server;
-  case MODE_IN_WRITE:
-  case MODE_IN_SEND_UD:
-    return !c->is_server;
-  }
-  return 0;
-}
-
-static int is_ud_mode(enum scale_mode m) {
-  return m == MODE_OUT_SEND_UD || m == MODE_IN_SEND_UD;
-}
-
 int main(int argc, char **argv) {
   struct cfg c;
   parse(argc, argv, &c);
@@ -362,22 +413,18 @@ int main(int argc, char **argv) {
   if (c.pin_cpu >= 0)
     vt_pin_cpu(c.pin_cpu);
 
-  const int is_ud = is_ud_mode(c.mode);
-  const int sender = i_am_sender(&c);
-  const int N = c.paper_n;
+  const int is_ud = (c.xport == XPORT_UD);
+  const int requester = i_am_requester(&c);
+  const int n_peer = c.n_peer;
 
-  int n_local;
-  int n_peer = N;
-  if (is_ud)
-    n_local = 1;
-  else
-    n_local = N;
+  /* UD: one local QP. Connected: one QP per remote peer. */
+  int n_local = is_ud ? 1 : n_peer;
 
   enum ibv_qp_type qpt =
-      is_ud ? IBV_QPT_UD : (c.use_uc ? IBV_QPT_UC : IBV_QPT_RC);
+      is_ud ? IBV_QPT_UD : (c.xport == XPORT_UC ? IBV_QPT_UC : IBV_QPT_RC);
   const int inl_cap = vt_inline_grant(c.size, c.use_inline, is_ud);
   const int sq_depth = 128;
-  const int rq_depth = is_ud ? 512 : 16;
+  const int rq_depth = is_send_mode(c.mode) ? 512 : (is_ud ? 512 : 16);
 
   int unsig = c.unsig;
   if (unsig > 1 && unsig < 2 * c.postlist)
@@ -404,14 +451,13 @@ int main(int argc, char **argv) {
   for (int i = 0; i < n_local; i++) {
     scqs[i] = ibv_create_cq(v.ctx, 512, NULL, NULL, 0);
     VT_CHECK(scqs[i], "scq");
-    if (is_ud) {
+    if (is_ud || is_send_mode(c.mode)) {
       rcqs[i] = ibv_create_cq(v.ctx, 512, NULL, NULL, 0);
       VT_CHECK(rcqs[i], "rcq");
     } else {
       rcqs[i] = scqs[i];
     }
-    qps[i] = create_qp(&v, scqs[i], rcqs[i], qpt, inl_cap, sq_depth,
-                       is_ud ? rq_depth : 16);
+    qps[i] = create_qp(&v, scqs[i], rcqs[i], qpt, inl_cap, sq_depth, rq_depth);
     psns[i] = (uint32_t)((vt_ns() + (uint64_t)i * 9973 +
                           (uint64_t)c.proc_id * 7919) &
                          0xffffff);
@@ -422,8 +468,7 @@ int main(int argc, char **argv) {
 
   if (c.is_server) {
     mesh_listen_exchange(&c, locals, remotes, n_peer, n_local);
-  } else if (c.mode == MODE_IN_SEND_UD) {
-    /* In-SEND: every client connects only to MS process 0. */
+  } else if (c.mode == MODE_IN_SEND && is_ud) {
     int fd = -1;
     for (int try = 0; try < 600; try++) {
       fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -445,18 +490,16 @@ int main(int argc, char **argv) {
     vt_tcp_exchange(fd, &locals[0], &remotes[0]);
     close(fd);
   } else {
-    /* Connected WRITE/READ, and Out-SEND-UD: full N×N TCP mesh. */
     mesh_connect_exchange(&c, locals, remotes, n_peer, n_local);
   }
 
   if (is_ud) {
     vt_qp_to_rtr(&v, qps[0], &remotes[0], qpt);
     vt_qp_to_rts(qps[0], psns[0]);
-    if (c.mode == MODE_OUT_SEND_UD && sender) {
-      /* One AH per client peer; this server proc can SEND to every client. */
+    if (c.mode == MODE_OUT_SEND && requester) {
       for (int i = 0; i < n_peer; i++)
         ahs[i] = make_ah(&v, &remotes[i]);
-    } else if (c.mode == MODE_IN_SEND_UD && sender) {
+    } else if (c.mode == MODE_IN_SEND && requester) {
       ahs[0] = make_ah(&v, &remotes[0]);
     }
   } else {
@@ -466,32 +509,78 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (!sender) {
-    printf("scale passive N=%d id=%d nqp=%d mode=%s\n", N, c.proc_id, n_local,
-           mode_name(c.mode, c.use_uc, c.use_inline));
+  const char *tag = mode_name(&c);
+
+  /* Responder / passive path */
+  if (!requester) {
+    const int need_recv = is_send_mode(c.mode);
+    printf("scale passive %s peers=%d id=%d nqp=%d\n", tag, n_peer, c.proc_id,
+           n_local);
     fflush(stdout);
-    if (is_ud) {
+
+    if (!need_recv) {
+      /* WRITE/READ target: no per-op notification; idle. */
+      if (c.duration > 0)
+        sleep((unsigned)c.duration + 5);
+      else
+        pause();
+      return 0;
+    }
+
+    /* SEND target: post RECVs; optionally count for remote-side metering. */
+    for (int qi = 0; qi < n_local; qi++) {
       for (int r = 0; r < rq_depth / 2; r++)
-        ud_post_recv(qps[0], &v, (uint64_t)r);
-      for (;;) {
+        post_recv(qps[qi], &v, (uint64_t)r + (uint64_t)qi * 1000003ull, is_ud);
+    }
+
+    uint64_t ops = 0;
+    uint64_t t0 = vt_ns();
+    uint64_t deadline =
+        t0 + (uint64_t)(c.duration > 0 ? c.duration : 3600) * 1000000000ull;
+    const uint64_t check_every = 65536;
+    uint64_t poll_iters = 0;
+
+    while (1) {
+      /* Check time on idle polls too — peer may stop posting before ops hits
+       * the next check_every boundary (otherwise we busy-spin forever). */
+      int got = 0;
+      for (int qi = 0; qi < n_local; qi++) {
         struct ibv_wc wc[16];
-        int n = ibv_poll_cq(rcqs[0], 16, wc);
+        int n = ibv_poll_cq(rcqs[qi], 16, wc);
         for (int i = 0; i < n; i++) {
           if (wc[i].status != IBV_WC_SUCCESS) {
             fprintf(stderr, "wc %s\n", ibv_wc_status_str(wc[i].status));
             exit(1);
           }
-          if (wc[i].opcode & IBV_WC_RECV)
-            ud_post_recv(qps[0], &v, wc[i].wr_id);
+          if (wc[i].opcode & IBV_WC_RECV) {
+            post_recv(qps[qi], &v, wc[i].wr_id, is_ud);
+            ops++;
+            got++;
+          }
         }
       }
+      poll_iters++;
+      if (c.duration > 0 &&
+          (got == 0 || (ops & (check_every - 1)) == 0 ||
+           (poll_iters & 1023) == 0) &&
+          vt_ns() >= deadline)
+        break;
     }
-    pause();
+
+    double sec = (vt_ns() - t0) / 1e9;
+    if (sec < 1e-6)
+      sec = 1e-6;
+    double mops = ops / sec / 1e6;
+    printf("scale %s: %.2f Mops  peers=%d id=%d Q=%d size=%d postlist=%d "
+           "(recv)\n",
+           tag, mops, n_peer, c.proc_id, is_ud ? 1 : n_peer, c.size,
+           c.postlist);
+    fflush(stdout);
     return 0;
   }
 
+  /* Requester hot path */
   memset(v.buf, 1, VT_BUF_SIZE);
-
   const int pl = c.postlist;
   struct ibv_send_wr wr[64], *bad;
   struct ibv_sge sge[64];
@@ -500,23 +589,25 @@ int main(int argc, char **argv) {
   uint64_t ops = 0;
   uint64_t seed = 0x12345678abcdefull ^ ((uint64_t)c.proc_id << 17);
 
-  const char *tag = mode_name(c.mode, c.use_uc, c.use_inline);
-  printf("scale sender %s N=%d id=%d nqp=%d size=%d inl=%d postlist=%d "
+  printf("scale sender %s peers=%d id=%d nqp=%d size=%d inl=%d postlist=%d "
          "unsig=%d\n",
-         tag, N, c.proc_id, is_ud ? 1 : n_local, c.size, inl_cap, pl, unsig);
+         tag, n_peer, c.proc_id, n_local, c.size, inl_cap, pl, unsig);
   fflush(stdout);
 
   const uint64_t check_every = 65536;
   uint64_t t0 = vt_ns();
   uint64_t deadline = t0 + (uint64_t)c.duration * 1000000000ull;
+  uint64_t loop_iters = 0;
 
   while (1) {
-    if ((ops & (check_every - 1)) == 0 && ops > 0) {
-      if (vt_ns() >= deadline)
-        break;
-    }
+    loop_iters++;
+    if (c.duration > 0 &&
+        ((ops & (check_every - 1)) == 0 || (loop_iters & 1023) == 0) &&
+        vt_ns() >= deadline)
+      break;
 
-    if (c.mode == MODE_OUT_SEND_UD) {
+    if (c.mode == MODE_OUT_SEND && is_ud) {
+      int stop = 0;
       for (int w = 0; w < pl; w++) {
         int dest = (int)(seed % (uint64_t)n_peer);
         seed = seed * 6364136223846793005ull + 1;
@@ -528,8 +619,12 @@ int main(int argc, char **argv) {
         wr[w].next = (w == pl - 1) ? NULL : &wr[w + 1];
         wr[w].send_flags =
             vt_should_signal(nb_tx_qp[0], unsig) ? IBV_SEND_SIGNALED : 0;
-        if (vt_should_signal(nb_tx_qp[0], unsig) && nb_tx_qp[0] > 0)
-          poll_one(scqs[0]);
+        if (vt_should_signal(nb_tx_qp[0], unsig) && nb_tx_qp[0] > 0) {
+          if (poll_one_until(scqs[0], deadline) != 0) {
+            stop = 1;
+            break;
+          }
+        }
         if (c.use_inline && c.size <= inl_cap)
           wr[w].send_flags |= IBV_SEND_INLINE;
         sge[w].addr = (uintptr_t)v.buf;
@@ -540,9 +635,12 @@ int main(int argc, char **argv) {
         wr[w].wr.ud.remote_qkey = 0x11111111;
         nb_tx_qp[0]++;
       }
+      if (stop)
+        break;
       VT_CHECK(ibv_post_send(qps[0], &wr[0], &bad) == 0, "post");
       ops += (uint64_t)pl;
-    } else if (c.mode == MODE_IN_SEND_UD) {
+    } else if (c.mode == MODE_IN_SEND && is_ud) {
+      int stop = 0;
       for (int w = 0; w < pl; w++) {
         memset(&wr[w], 0, sizeof(wr[w]));
         memset(&sge[w], 0, sizeof(sge[w]));
@@ -552,8 +650,12 @@ int main(int argc, char **argv) {
         wr[w].next = (w == pl - 1) ? NULL : &wr[w + 1];
         wr[w].send_flags =
             vt_should_signal(nb_tx_qp[0], unsig) ? IBV_SEND_SIGNALED : 0;
-        if (vt_should_signal(nb_tx_qp[0], unsig) && nb_tx_qp[0] > 0)
-          poll_one(scqs[0]);
+        if (vt_should_signal(nb_tx_qp[0], unsig) && nb_tx_qp[0] > 0) {
+          if (poll_one_until(scqs[0], deadline) != 0) {
+            stop = 1;
+            break;
+          }
+        }
         if (c.use_inline && c.size <= inl_cap)
           wr[w].send_flags |= IBV_SEND_INLINE;
         sge[w].addr = (uintptr_t)v.buf;
@@ -564,13 +666,22 @@ int main(int argc, char **argv) {
         wr[w].wr.ud.remote_qkey = 0x11111111;
         nb_tx_qp[0]++;
       }
+      if (stop)
+        break;
       VT_CHECK(ibv_post_send(qps[0], &wr[0], &bad) == 0, "post");
       ops += (uint64_t)pl;
     } else {
       int qi = (int)(seed % (uint64_t)n_local);
       seed = seed * 6364136223846793005ull + 1;
-      enum ibv_wr_opcode opc = (c.mode == MODE_OUT_READ) ? IBV_WR_RDMA_READ
-                                                         : IBV_WR_RDMA_WRITE;
+      enum ibv_wr_opcode opc;
+      int stop = 0;
+      if (is_read_mode(c.mode))
+        opc = IBV_WR_RDMA_READ;
+      else if (is_send_mode(c.mode))
+        opc = IBV_WR_SEND;
+      else
+        opc = IBV_WR_RDMA_WRITE;
+
       for (int w = 0; w < pl; w++) {
         memset(&wr[w], 0, sizeof(wr[w]));
         memset(&sge[w], 0, sizeof(sge[w]));
@@ -580,18 +691,25 @@ int main(int argc, char **argv) {
         wr[w].next = (w == pl - 1) ? NULL : &wr[w + 1];
         wr[w].send_flags =
             vt_should_signal(nb_tx_qp[qi], unsig) ? IBV_SEND_SIGNALED : 0;
-        if (vt_should_signal(nb_tx_qp[qi], unsig) && nb_tx_qp[qi] > 0)
-          poll_one(scqs[qi]);
-        /* READ cannot inline payload the same way; only WRITE uses INLINE. */
-        if (c.mode != MODE_OUT_READ && c.use_inline && c.size <= inl_cap)
+        if (vt_should_signal(nb_tx_qp[qi], unsig) && nb_tx_qp[qi] > 0) {
+          if (poll_one_until(scqs[qi], deadline) != 0) {
+            stop = 1;
+            break;
+          }
+        }
+        if (!is_read_mode(c.mode) && c.use_inline && c.size <= inl_cap)
           wr[w].send_flags |= IBV_SEND_INLINE;
         sge[w].addr = (uintptr_t)(v.buf + (size_t)qi * 64);
         sge[w].length = (uint32_t)c.size;
         sge[w].lkey = v.mr->lkey;
-        wr[w].wr.rdma.remote_addr = remotes[qi].addr;
-        wr[w].wr.rdma.rkey = remotes[qi].rkey;
+        if (!is_send_mode(c.mode)) {
+          wr[w].wr.rdma.remote_addr = remotes[qi].addr;
+          wr[w].wr.rdma.rkey = remotes[qi].rkey;
+        }
         nb_tx_qp[qi]++;
       }
+      if (stop)
+        break;
       VT_CHECK(ibv_post_send(qps[qi], &wr[0], &bad) == 0, "post");
       ops += (uint64_t)pl;
     }
@@ -601,13 +719,9 @@ int main(int argc, char **argv) {
   if (sec < 1e-6)
     sec = 1e-6;
   double mops = ops / sec / 1e6;
-  /* Out-SEND-UD: N senders × N destinations (AH paths). In-SEND: 1 recv QP. */
-  int q_report =
-      (c.mode == MODE_OUT_SEND_UD) ? (N * N)
-      : (c.mode == MODE_IN_SEND_UD)  ? 1
-                                     : (N * N);
-  printf("scale %s: %.2f Mops  N=%d id=%d Q=%d size=%d postlist=%d\n", tag,
-         mops, N, c.proc_id, q_report, c.size, pl);
+  int q_report = is_ud ? ((c.mode == MODE_IN_SEND) ? 1 : n_peer) : n_peer;
+  printf("scale %s: %.2f Mops  peers=%d id=%d Q=%d size=%d postlist=%d\n", tag,
+         mops, n_peer, c.proc_id, q_report, c.size, pl);
   fflush(stdout);
 
   for (int i = 0; i < n_peer; i++) {
