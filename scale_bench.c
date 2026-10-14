@@ -250,11 +250,6 @@ static void parse(int argc, char **argv, struct cfg *c) {
     fprintf(stderr, "UD is only valid for out-send/in-send\n");
     exit(1);
   }
-  if (c->mode == MODE_IN_SEND && c->xport == XPORT_UD && c->is_server &&
-      c->proc_id != 0) {
-    fprintf(stderr, "In-SEND-UD server side: only -I 0\n");
-    exit(1);
-  }
   if (c->unsig < 1)
     c->unsig = 1;
   if (c->postlist < 1)
@@ -468,39 +463,17 @@ int main(int argc, char **argv) {
 
   if (c.is_server) {
     mesh_listen_exchange(&c, locals, remotes, n_peer, n_local);
-  } else if (c.mode == MODE_IN_SEND && is_ud) {
-    int fd = -1;
-    for (int try = 0; try < 600; try++) {
-      fd = socket(AF_INET, SOCK_STREAM, 0);
-      VT_CHECK(fd >= 0, "socket");
-      struct sockaddr_in addr;
-      memset(&addr, 0, sizeof(addr));
-      addr.sin_family = AF_INET;
-      addr.sin_port = htons(c.port);
-      VT_CHECK(inet_pton(AF_INET, c.ip, &addr.sin_addr) == 1, "inet_pton");
-      if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0)
-        break;
-      close(fd);
-      fd = -1;
-      usleep(50000);
-    }
-    VT_CHECK(fd >= 0, "connect MS");
-    uint8_t me = (uint8_t)c.proc_id;
-    VT_CHECK(write(fd, &me, 1) == 1, "send id");
-    vt_tcp_exchange(fd, &locals[0], &remotes[0]);
-    close(fd);
   } else {
+    /* In-SEND-UD uses the same full mesh as Out-SEND-UD (roles flipped). */
     mesh_connect_exchange(&c, locals, remotes, n_peer, n_local);
   }
 
   if (is_ud) {
     vt_qp_to_rtr(&v, qps[0], &remotes[0], qpt);
     vt_qp_to_rts(qps[0], psns[0]);
-    if (c.mode == MODE_OUT_SEND && requester) {
+    if (requester) {
       for (int i = 0; i < n_peer; i++)
         ahs[i] = make_ah(&v, &remotes[i]);
-    } else if (c.mode == MODE_IN_SEND && requester) {
-      ahs[0] = make_ah(&v, &remotes[0]);
     }
   } else {
     for (int i = 0; i < n_local; i++) {
@@ -606,7 +579,8 @@ int main(int argc, char **argv) {
         vt_ns() >= deadline)
       break;
 
-    if (c.mode == MODE_OUT_SEND && is_ud) {
+    if (is_ud && is_send_mode(c.mode)) {
+      /* Out-SEND-UD and In-SEND-UD: one local QP, AH per peer, random dest. */
       int stop = 0;
       for (int w = 0; w < pl; w++) {
         int dest = (int)(seed % (uint64_t)n_peer);
@@ -632,37 +606,6 @@ int main(int argc, char **argv) {
         sge[w].lkey = v.mr->lkey;
         wr[w].wr.ud.ah = ahs[dest];
         wr[w].wr.ud.remote_qpn = remotes[dest].qpn;
-        wr[w].wr.ud.remote_qkey = 0x11111111;
-        nb_tx_qp[0]++;
-      }
-      if (stop)
-        break;
-      VT_CHECK(ibv_post_send(qps[0], &wr[0], &bad) == 0, "post");
-      ops += (uint64_t)pl;
-    } else if (c.mode == MODE_IN_SEND && is_ud) {
-      int stop = 0;
-      for (int w = 0; w < pl; w++) {
-        memset(&wr[w], 0, sizeof(wr[w]));
-        memset(&sge[w], 0, sizeof(sge[w]));
-        wr[w].opcode = IBV_WR_SEND;
-        wr[w].num_sge = 1;
-        wr[w].sg_list = &sge[w];
-        wr[w].next = (w == pl - 1) ? NULL : &wr[w + 1];
-        wr[w].send_flags =
-            vt_should_signal(nb_tx_qp[0], unsig) ? IBV_SEND_SIGNALED : 0;
-        if (vt_should_signal(nb_tx_qp[0], unsig) && nb_tx_qp[0] > 0) {
-          if (poll_one_until(scqs[0], deadline) != 0) {
-            stop = 1;
-            break;
-          }
-        }
-        if (c.use_inline && c.size <= inl_cap)
-          wr[w].send_flags |= IBV_SEND_INLINE;
-        sge[w].addr = (uintptr_t)v.buf;
-        sge[w].length = (uint32_t)c.size;
-        sge[w].lkey = v.mr->lkey;
-        wr[w].wr.ud.ah = ahs[0];
-        wr[w].wr.ud.remote_qpn = remotes[0].qpn;
         wr[w].wr.ud.remote_qkey = 0x11111111;
         nb_tx_qp[0]++;
       }
@@ -719,7 +662,7 @@ int main(int argc, char **argv) {
   if (sec < 1e-6)
     sec = 1e-6;
   double mops = ops / sec / 1e6;
-  int q_report = is_ud ? ((c.mode == MODE_IN_SEND) ? 1 : n_peer) : n_peer;
+  int q_report = n_peer;
   printf("scale %s: %.2f Mops  peers=%d id=%d Q=%d size=%d postlist=%d\n", tag,
          mops, n_peer, c.proc_id, q_report, c.size, pl);
   fflush(stdout);

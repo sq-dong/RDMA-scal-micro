@@ -1,0 +1,3 @@
+vt: pinned cpu=10 numa=0
+vt: device=mlx5_0 port=1 lid=0 roce=1 gid_index=4 active_mtu=5
+scale passive In-WRITE-UC-inl peers=48 id=37 nqp=48

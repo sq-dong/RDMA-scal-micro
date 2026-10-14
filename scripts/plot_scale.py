@@ -148,8 +148,15 @@ def x_of(row: tuple[int, int, float], which: str) -> int:
 
 def xlabel_for(which: str) -> str:
     if which == "n":
-        return "N (processes per side; clients = N)"
-    return "Active QPs or destinations (Q)"
+        return "N (server processes per side)"
+    return "Number of active QPs (Q)"
+
+
+def fig_stem(base: str, x_which: str) -> str:
+    """Keep legacy names for --x n; QP-axis figures get a _Q suffix."""
+    if x_which == "n":
+        return base
+    return f"{base}_Q"
 
 
 def ordered_curves(data: dict[str, list[tuple[int, int, float]]]) -> list[str]:
@@ -172,13 +179,34 @@ def plot_one(
 ) -> None:
     plt.rcParams.update(STYLE)
     fig, ax = plt.subplots(figsize=figsize)
+
+    # For --x q: place points on an even categorical axis (index), label ticks
+    # with the real QP counts so large Q values don't crush small ones.
+    q_even = x_which == "q"
+    q_levels: list[int] = []
+    if q_even:
+        q_set: set[int] = set()
+        for curve in curves:
+            for r in data.get(curve, []):
+                q_set.add(x_of(r, "q"))
+        q_levels = sorted(q_set)
+        q_to_pos = {q: i for i, q in enumerate(q_levels)}
+
     drawn = 0
+    all_xs: list[int] = []
     for curve in curves:
         rows = data.get(curve)
         if not rows:
             continue
-        xs = [x_of(r, x_which) for r in rows]
-        ys = [r[2] for r in rows]
+        # Sort by the chosen x so curves are monotonic on that axis.
+        keyed = sorted(((x_of(r, x_which), r[2]) for r in rows), key=lambda t: t[0])
+        raw_xs = [t[0] for t in keyed]
+        ys = [t[1] for t in keyed]
+        if q_even:
+            xs = [q_to_pos[q] for q in raw_xs]
+        else:
+            xs = raw_xs
+        all_xs.extend(raw_xs if not q_even else xs)
         st = style_for(curve)
         ax.plot(
             xs,
@@ -201,12 +229,15 @@ def plot_one(
     ax.set_title(title)
     ax.set_ylim(bottom=0)
     if x_which == "n":
-        xmax = max((max(xs) for xs in (
-            [x_of(r, x_which) for r in data.get(c, [])]
-            for c in curves if data.get(c)
-        )), default=32)
+        xmax = max(all_xs) if all_xs else 32
         ticks = list(range(4, max(xmax, 32) + 1, 4))
         ax.set_xticks(ticks)
+    else:
+        # Even spacing: tick at each category index, label = QP count.
+        ax.set_xticks(list(range(len(q_levels))))
+        ax.set_xticklabels([str(q) for q in q_levels])
+        if q_levels:
+            ax.set_xlim(-0.3, len(q_levels) - 0.7)
     if legend_outside:
         ax.legend(
             loc="upper left",
@@ -229,7 +260,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--csv", type=Path, default=None)
     ap.add_argument("--out-dir", type=Path, default=None)
-    ap.add_argument("--x", choices=["n", "q"], default="n")
+    ap.add_argument(
+        "--x",
+        choices=["n", "q"],
+        default="n",
+        help="x-axis: n (server procs, default) or q (active QPs)",
+    )
     ap.add_argument(
         "--fig",
         nargs="+",
@@ -249,36 +285,41 @@ def main() -> None:
     data = load_csv(csv_path)
     print(f"loaded {csv_path}: {len(data)} curves, x={args.x}")
 
+    # Larger canvases for dense multi-curve plots.
+    fig_all = (20.0, 11.0)
+    fig_starred = (18.0, 10.0)
+    fig_a = (9.0, 6.0)
+
     all_curves = ordered_curves(data)
     for fig_id in args.fig:
         if fig_id == "all":
             plot_one(
                 data,
                 all_curves,
-                out_dir / "scale_fig_all",
+                out_dir / fig_stem("scale_fig_all", args.x),
                 "All measured curves",
                 args.x,
-                figsize=(14.0, 8.0),
+                figsize=fig_all,
                 legend_outside=True,
             )
         elif fig_id == "starred":
             plot_one(
                 data,
                 STARRED,
-                out_dir / "scale_fig_starred",
+                out_dir / fig_stem("scale_fig_starred", args.x),
                 "Starred verb subset",
                 args.x,
-                figsize=(14.0, 8.0),
+                figsize=fig_starred,
                 legend_outside=True,
             )
         else:
             plot_one(
                 data,
                 FIG_A,
-                out_dir / "scale_fig_A",
+                out_dir / fig_stem("scale_fig_A", args.x),
                 "Fig.A - WRITE-UC-inl and SEND-UD-inl",
                 args.x,
-                figsize=(8.0, 5.5),
+                figsize=fig_a,
                 legend_outside=False,
             )
 

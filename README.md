@@ -24,9 +24,9 @@ Peers exchange QP endpoints over TCP and use RoCEv2 GIDs. Default load: 32-byte 
 | `out-write` / `out-read` | Sends; reports Mops | Passive |
 | `in-write` | Passive | Sends; reports Mops |
 | `out-send-ud` | N processes: one UD QP and N AHs each | N receivers |
-| `in-send-ud` | Process `-I 0` only: one UD QP receive | N senders |
+| `in-send-ud` | N processes: one UD QP receive each (full mesh) | N senders, AH per server |
 
-Connected WRITE/READ use an N by N QP mesh (Q = N squared). Out-SEND uses N UD QPs on the server (one per process). In-SEND uses one UD QP on the server.
+Connected WRITE/READ use an N by N QP mesh (Q = N squared). Out-SEND-UD and In-SEND-UD both use a full mesh of UD endpoints (Q = n_srv × n_clt); roles are flipped.
 
 ## Cluster
 

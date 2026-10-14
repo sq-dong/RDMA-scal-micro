@@ -1,0 +1,4 @@
+vt: pinned cpu=30 numa=0
+vt: device=mlx5_0 port=1 lid=0 roce=1 gid_index=4 active_mtu=5
+scale sender Out-WRITE-UC-inl peers=40 id=15 nqp=40 size=32 inl=60 postlist=1 unsig=4
+scale Out-WRITE-UC-inl: 0.80 Mops  peers=40 id=15 Q=40 size=32 postlist=1

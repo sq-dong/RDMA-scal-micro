@@ -103,24 +103,9 @@ parse_curve() {
 }
 
 active_metric() {
+  # Full-mesh active connections = n_srv * n_clt for all verbs (incl. SEND-UD).
   local mode=$1 n_srv=$2 n_clt=$3
-  case "$mode" in
-    in-send)
-      if [[ "$UC_FLAG" == "--ud" ]]; then
-        echo "$n_clt"
-      else
-        echo $((n_srv * n_clt))
-      fi
-      ;;
-    out-send)
-      if [[ "$UC_FLAG" == "--ud" ]]; then
-        echo $((n_srv * n_clt))
-      else
-        echo $((n_srv * n_clt))
-      fi
-      ;;
-    *) echo $((n_srv * n_clt)) ;;
-  esac
+  echo $((n_srv * n_clt))
 }
 
 # Launch clients id=lo..hi. peers_q = -q for clients (usually n_srv).
@@ -191,16 +176,10 @@ run_one() {
   qmetric=$(active_metric "$MODE" "$n_srv" "$n_clt")
 
   # Server -q = client count (peers); client -q = server count.
+  # In-SEND-UD matches Out-SEND-UD: full N×(CLT_MULT*N) mesh, roles flipped.
   local srv_peers=$n_clt
   local clt_peers=$n_srv
   local n_ms=$n_srv
-  if [[ "$MODE" == "in-send" && "$UC_FLAG" == "--ud" ]]; then
-    n_ms=1
-    # In-SEND-UD: each client still uses -q 1 conceptually but connects to MS0;
-    # scale_bench in-send-ud path uses -q as listen peer count on server.
-    srv_peers=$n_clt
-    clt_peers=1
-  fi
 
   log "$LABEL n_srv=$n_srv n_clt=$n_clt port=$port count=$COUNT [$RESULT_TAG]"
 

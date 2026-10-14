@@ -1,0 +1,25 @@
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=0 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=10 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=11 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=12 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.16 Mops  peers=24 id=13 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=14 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=15 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.16 Mops  peers=24 id=16 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=17 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=18 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=19 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=1 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=20 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=21 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=22 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=23 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.16 Mops  peers=24 id=2 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=3 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=4 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=5 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.16 Mops  peers=24 id=6 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.16 Mops  peers=24 id=7 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=8 Q=24 size=32 postlist=1
+scale In-WRITE-RC-dma: 1.17 Mops  peers=24 id=9 Q=24 size=32 postlist=1
+

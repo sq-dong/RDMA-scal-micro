@@ -1,0 +1,4 @@
+vt: pinned cpu=62 numa=0
+vt: device=mlx5_0 port=1 lid=0 roce=1 gid_index=4 active_mtu=5
+scale sender Out-WRITE-UC-inl peers=32 id=31 nqp=32 size=32 inl=60 postlist=1 unsig=4
+scale Out-WRITE-UC-inl: 0.97 Mops  peers=32 id=31 Q=32 size=32 postlist=1
