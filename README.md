@@ -95,3 +95,18 @@ ssh server03 'cd ~/rdma_scal && ./scale_bench -c -d mlx5_3 -a 10.0.0.20 -x 3 \
 ## Reading results
 
 Use Out-WRITE-UC-inl versus N or active QPs to find the outbound peak and drop (QP-context pressure on the server NIC). Compare In-WRITE on the same axis; with a weak single client, In may reflect client TX limits rather than server inbound capacity. Out-SEND-UD (N server senders) typically plateaus near the small-message send-rate ceiling. Keep `POSTLIST=1` on the main sweep so large postlists do not hide context misses.
+
+## PCM (Intel Processor Counter Monitor)
+
+Official repo: [github.com/intel/pcm](https://github.com/intel/pcm) (git submodule `pcm/`).
+How to build and measure: **[docs/pcm.md](docs/pcm.md)**.
+
+```bash
+git submodule update --init --recursive
+cd pcm && mkdir -p build && cd build && cmake .. && cmake --build . --parallel
+cd ~/rdma_scal && make -j && source ./scripts/setup_machine.sh
+
+NQPS="1 4 8 16" TPUT_SEC=10 BENCH=all ./scripts/collect_pcm.sh
+```
+
+Needs `sudo`. Summary: `results/pcm_*/pcm_summary.csv`.

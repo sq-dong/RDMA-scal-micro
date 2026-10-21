@@ -2,5 +2,9 @@
 scale_bench
 results/*.csv
 results/scale_N*
+results/pcm_*
 STATUS.md
 cache_probe/
+*.pcm.err
+# official intel/pcm submodule local build
+pcm/build/

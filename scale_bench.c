@@ -48,6 +48,7 @@ struct cfg {
   enum transport xport;
   enum scale_mode mode;
   int pin_cpu;
+  size_t buf_bytes; /* 0 => VT_BUF_SIZE; -B sets this (LLC footprint) */
 };
 
 static void usage(const char *a) {
@@ -55,10 +56,12 @@ static void usage(const char *a) {
           "Usage: %s -s|-c -d DEV -a IP -I ID -q PEERS [-p PORT] [-x GID]\n"
           "  -M out-write|in-write|out-read|in-read|out-send|in-send\n"
           "  [-t POSTLIST] [-l SIZE] [-Q UNSIG] [-D SEC] [-C CPU]\n"
-          "  [--no-inline] [--rc|--uc|--ud]\n"
+          "  [-B BUF_MB] [--no-inline] [--rc|--uc|--ud]\n"
           "  -q PEERS : remote peer count (QPs or UD destinations)\n"
           "  -I       : process id (>= 0)\n"
-          "  -a       : server RoCE IPv4 (TCP bind/connect target)\n",
+          "  -a       : server RoCE IPv4 (TCP bind/connect target)\n"
+          "  -B       : registered buf size in MiB (spread remote addrs; "
+          "PCM LLC test)\n",
           a);
   exit(1);
 }
@@ -159,14 +162,15 @@ static void parse(int argc, char **argv, struct cfg *c) {
   c->is_server = -1;
   c->mode = MODE_OUT_WRITE;
   c->pin_cpu = -1;
+  c->buf_bytes = 0;
   static struct option longopts[] = {{"no-inline", no_argument, 0, 1001},
                                      {"rc", no_argument, 0, 1002},
                                      {"uc", no_argument, 0, 1003},
                                      {"ud", no_argument, 0, 1004},
                                      {0, 0, 0, 0}};
   int opt;
-  while ((opt = getopt_long(argc, argv, "scd:a:p:x:l:q:I:t:Q:D:M:C:h", longopts,
-                            NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "scd:a:p:x:l:q:I:t:Q:D:M:C:B:h",
+                            longopts, NULL)) != -1) {
     switch (opt) {
     case 's':
       c->is_server = 1;
@@ -212,6 +216,13 @@ static void parse(int argc, char **argv, struct cfg *c) {
     case 'C':
       c->pin_cpu = atoi(optarg);
       break;
+    case 'B': {
+      int mb = atoi(optarg);
+      if (mb < 1)
+        mb = 1;
+      c->buf_bytes = (size_t)mb * 1024ull * 1024ull;
+      break;
+    }
     case 1001:
       c->use_inline = 0;
       break;
@@ -429,7 +440,17 @@ int main(int argc, char **argv) {
 
   struct vt_ctx v;
   vt_open_device(&v, c.dev, 1, c.gid_index);
-  vt_alloc_buf(&v, VT_BUF_SIZE,
+  /* -B: enlarge MR so remote WRITEs hit a larger LLC footprint (PCM). */
+  size_t buf_bytes = c.buf_bytes ? c.buf_bytes : (size_t)VT_BUF_SIZE;
+  size_t addr_stride = 4096;
+  if (n_local > 0 && buf_bytes / (size_t)n_local > addr_stride)
+    addr_stride = buf_bytes / (size_t)n_local;
+  addr_stride &= ~(size_t)63; /* cacheline align */
+  if (addr_stride < 4096)
+    addr_stride = 4096;
+  if (addr_stride * (size_t)n_local > buf_bytes)
+    buf_bytes = addr_stride * (size_t)n_local;
+  vt_alloc_buf(&v, buf_bytes,
                IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE |
                    IBV_ACCESS_REMOTE_READ);
 
@@ -457,7 +478,7 @@ int main(int argc, char **argv) {
                           (uint64_t)c.proc_id * 7919) &
                          0xffffff);
     vt_fill_local_ep(&v, qps[i], psns[i], &locals[i]);
-    locals[i].addr = (uint64_t)(uintptr_t)(v.buf + (size_t)i * 4096);
+    locals[i].addr = (uint64_t)(uintptr_t)(v.buf + (size_t)i * addr_stride);
     vt_qp_to_init(qps[i], v.port);
   }
 
@@ -553,7 +574,7 @@ int main(int argc, char **argv) {
   }
 
   /* Requester hot path */
-  memset(v.buf, 1, VT_BUF_SIZE);
+  memset(v.buf, 1, v.buf_size);
   const int pl = c.postlist;
   struct ibv_send_wr wr[64], *bad;
   struct ibv_sge sge[64];
